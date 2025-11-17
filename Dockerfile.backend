@@ -1,0 +1,38 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+# Install system dependencies required for Pillow and other packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc6-dev \
+    zlib1g-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend application
+COPY app.py confbadger.py config.yaml ./
+
+# Create necessary directories
+RUN mkdir -p badges codes temp flags fonts
+
+# Copy static assets
+COPY badges/ badges/
+COPY codes/ codes/
+COPY flags/ flags/
+COPY fonts/ fonts/
+
+# Expose port
+EXPOSE 8000
+
+# Run the application
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
