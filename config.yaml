@@ -118,8 +118,10 @@ sticker-labels:
   layout:
     qr-margin: 3           # Margin around QR code in points
     text-left-margin: 5    # Left margin for text in points
-    text-top-margin: 22    # Top margin for text in points
+    text-top-margin: 26    # Top margin for text in points
     qr-text-gap: 5         # Gap between text and QR code in points
+    name-gap: 3            # Gap between first and last name in points
+    name-info-gap: 4       # Gap between names and title/company in points
   
   # Font sizes (in points)
   fonts:
@@ -127,7 +129,7 @@ sticker-labels:
     last-name-size: 13
     title-size: 9
     company-size: 9
-    banner-size: 16        # Attendee type banner text size
+    banner-size: 20        # Attendee type banner text size
   
   # Text truncation limits (approximate character counts)
   truncate:
@@ -138,4 +140,5 @@ sticker-labels:
   
   # Banner (attendee type bar)
   banner:
-    height: 25             # Height of banner in points
+    height: 28             # Height of banner in points
+    bottom-margin: 0       # Margin from bottom edge in points
