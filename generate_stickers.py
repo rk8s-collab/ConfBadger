@@ -143,19 +143,32 @@ END:VCARD'''
     y_pos = height - top_margin
     
     # First Name (large, black, bold)
-    # Truncate if too long to prevent overlap with QR code
+    # Truncate by removing words from the end if too long
     first_display = firstname
     if len(firstname) > first_name_limit:
-        first_display = firstname[:first_name_limit] + "..."
+        words = firstname.split()
+        # Keep removing words from the end until it fits
+        while len(' '.join(words)) > first_name_limit and len(words) > 1:
+            words.pop()
+        first_display = ' '.join(words)
     label.add(shapes.String(left_margin, y_pos, first_display, 
                            fontName=name_font, fontSize=first_name_size, fillColor=black))
     y_pos -= (first_name_size + 2)  # Space after first name
     
     # Last Name (medium, red, bold)
-    # Truncate if too long
+    # Truncate by removing middle words if too long
     last_display = lastname.upper()
     if len(lastname) > last_name_limit:
-        last_display = lastname[:last_name_limit].upper() + "..."
+        words = lastname.split()
+        if len(words) > 2:
+            # Keep first and last word, remove middle ones
+            last_display = f"{words[0]} {words[-1]}".upper()
+        elif len(words) == 2:
+            # If still too long with 2 words, just use first word
+            last_display = words[0].upper()
+        else:
+            # Single word that's too long - keep as is (shouldn't happen with real names)
+            last_display = lastname.upper()
     label.add(shapes.String(left_margin, y_pos, last_display, 
                            fontName=name_font, fontSize=last_name_size, fillColor=red))
     y_pos -= (last_name_size + 3)  # Space after last name
