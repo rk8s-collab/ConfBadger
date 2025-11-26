@@ -62,6 +62,13 @@ def draw_label(label, width, height, obj):
     """
     firstname = obj.get('First Name', '')
     lastname = obj.get('Last Name', '')
+    
+    # Capitalize first letter to ensure proper casing
+    if firstname:
+        firstname = firstname[0].upper() + firstname[1:] if len(firstname) > 1 else firstname.upper()
+    if lastname:
+        lastname = lastname[0].upper() + lastname[1:] if len(lastname) > 1 else lastname.upper()
+    
     company = obj.get('Company', '')
     title = obj.get('Title', '')
     ticket_title = obj.get('Ticket title', '')
