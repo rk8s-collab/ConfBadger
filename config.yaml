@@ -94,3 +94,48 @@ pre-order-data:
 qr-code:
   status: "vcard"
   position: "70, 1300"
+
+# Label sheet specifications for stickers
+sticker-labels:
+  # Paper and label dimensions
+  sheet-width: 210         # A4 width in mm
+  sheet-height: 297        # A4 height in mm
+  label-width: 105         # Label width in mm (Buroline 500028)
+  label-height: 42.3       # Label height in mm
+  columns: 2               # Number of columns
+  rows: 7                  # Number of rows (14 labels total)
+  corner-radius: 0         # No rounded corners
+  
+  # Margins
+  left-margin: 0           # Sheet left margin in mm
+  right-margin: 0          # Sheet right margin in mm
+  top-margin: 0.45         # Sheet top margin in mm
+  bottom-margin: 0.45      # Sheet bottom margin in mm
+  row-gap: 0               # Gap between rows in mm
+  column-gap: 0            # Gap between columns in mm
+  
+  # Label content layout
+  layout:
+    qr-margin: 3           # Margin around QR code in points
+    text-left-margin: 5    # Left margin for text in points
+    text-top-margin: 22    # Top margin for text in points
+    qr-text-gap: 5         # Gap between text and QR code in points
+  
+  # Font sizes (in points)
+  fonts:
+    first-name-size: 24
+    last-name-size: 13
+    title-size: 9
+    company-size: 9
+    banner-size: 16        # Attendee type banner text size
+  
+  # Text truncation limits (approximate character counts)
+  truncate:
+    first-name: 15
+    last-name: 18
+    title: 35
+    company: 35
+  
+  # Banner (attendee type bar)
+  banner:
+    height: 25             # Height of banner in points
