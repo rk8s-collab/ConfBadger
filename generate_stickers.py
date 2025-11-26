@@ -251,7 +251,7 @@ def create_label_specification(config_data=None):
     return specs
 
 
-def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_file='config.yaml'):
+def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_file='config.yaml', debug=False):
     """
     Generate sticker labels from CSV file
     
@@ -259,6 +259,7 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_fi
         csv_file: Path to CSV file with attendee data
         output_file: Path to output PDF file
         config_file: Path to config file (optional, for future customization)
+        debug: If True, show label borders for debugging layout
     """
     logger.info(f"Reading data from {csv_file}")
     
@@ -287,8 +288,8 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_fi
     # Create label specification
     specs = create_label_specification(config_data)
     
-    # Create sheet
-    sheet = labels.Sheet(specs, draw_label, border=False)
+    # Create sheet with border based on debug flag
+    sheet = labels.Sheet(specs, draw_label, border=debug)
     
     # Add each attendee to the sheet
     logger.info(f"Processing {len(df)} attendees")
@@ -324,10 +325,12 @@ def main():
                        help='Output PDF file (default: stickers.pdf)')
     parser.add_argument('--config', default='config.yaml',
                        help='Config file (default: config.yaml)')
+    parser.add_argument('--debug', action='store_true',
+                       help='Show label borders for debugging layout')
     
     args = parser.parse_args()
     
-    generate_stickers(args.data, args.output, args.config)
+    generate_stickers(args.data, args.output, args.config, args.debug)
 
 
 if __name__ == '__main__':
