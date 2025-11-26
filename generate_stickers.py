@@ -283,8 +283,8 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_fi
         df = pd.read_csv(csv_file)
         # Fill NaN values
         df = df.fillna('')
-        # Sort by Last Name, then First Name
-        df = df.sort_values(by=['Last Name', 'First Name'])
+        # Sort by Last Name, then First Name (case-insensitive)
+        df = df.sort_values(by=['Last Name', 'First Name'], key=lambda x: x.str.lower())
     except Exception as e:
         logger.error(f"Error reading CSV file: {e}")
         sys.exit(1)
