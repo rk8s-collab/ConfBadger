@@ -273,7 +273,8 @@ def create_label_specification(config_data=None):
     return specs
 
 
-def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_file='config.yaml', debug=False):
+def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', 
+                      config_file='config.yaml', debug=False, since=None, after=None):
     """
     Generate sticker labels from CSV file
     
@@ -282,6 +283,8 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_fi
         output_file: Path to output PDF file
         config_file: Path to config file (optional, for future customization)
         debug: If True, show label borders for debugging layout
+        since: Only generate labels for registrations on or after this date (YYYY-MM-DD format)
+        after: Order or ticket number - generates labels for registrations from this order's date onwards
     """
     logger.info(f"Reading data from {csv_file}")
     
@@ -290,6 +293,43 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', config_fi
         df = pd.read_csv(csv_file)
         # Fill NaN values
         df = df.fillna('')
+        
+        # Convert date column first if needed for filtering
+        if (since or after) and 'Paid date (UTC)' in df.columns:
+            df['Paid date (UTC)'] = pd.to_datetime(df['Paid date (UTC)'], errors='coerce')
+        
+        # If --after is specified, find the registration date for that order/ticket and use it as --since
+        if after:
+            if 'Paid date (UTC)' in df.columns:
+                if 'Order number' in df.columns and 'Ticket number' in df.columns:
+                    mask = (df['Order number'] == after) | (df['Ticket number'] == after)
+                    if mask.any():
+                        after_date = df.loc[mask, 'Paid date (UTC)'].iloc[0]
+                        if pd.notna(after_date):
+                            since = after_date
+                            logger.info(f"Found order/ticket '{after}' registered at {after_date}, using as --since filter")
+                        else:
+                            logger.warning(f"Order/Ticket '{after}' found but has no registration date")
+                    else:
+                        logger.warning(f"Order/Ticket number '{after}' not found in CSV")
+                else:
+                    logger.warning("'Order number' or 'Ticket number' columns not found, ignoring --after filter")
+            else:
+                logger.warning("'Paid date (UTC)' column not found, ignoring --after filter")
+        
+        # Filter by date if --since is specified (or derived from --after)
+        if since:
+            if 'Paid date (UTC)' in df.columns:
+                if isinstance(since, str):
+                    since_date = pd.to_datetime(since).tz_localize('UTC')
+                else:
+                    since_date = since  # Already a datetime from --after
+                original_count = len(df)
+                df = df[df['Paid date (UTC)'] >= since_date]
+                logger.info(f"Filtered from {original_count} to {len(df)} registrations since {since_date}")
+            else:
+                logger.warning("'Paid date (UTC)' column not found, ignoring --since filter")
+        
         # Sort by Last Name, then First Name (case-insensitive)
         df = df.sort_values(by=['Last Name', 'First Name'], key=lambda x: x.str.lower())
     except Exception as e:
@@ -349,10 +389,14 @@ def main():
                        help='Config file (default: config.yaml)')
     parser.add_argument('--debug', action='store_true',
                        help='Show label borders for debugging layout')
+    parser.add_argument('--since', type=str,
+                       help='Only generate labels for registrations on or after this date (YYYY-MM-DD)')
+    parser.add_argument('--after', type=str,
+                       help='Order/ticket number - generates labels from this order\'s registration date onwards')
     
     args = parser.parse_args()
     
-    generate_stickers(args.data, args.output, args.config, args.debug)
+    generate_stickers(args.data, args.output, args.config, args.debug, args.since, args.after)
 
 
 if __name__ == '__main__':
