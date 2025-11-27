@@ -5,6 +5,7 @@ import os
 from typing import Optional
 import shutil
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
+from generate_stickers import generate_stickers
 import logging
 import glob
 
@@ -178,6 +179,58 @@ async def list_directories():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-stickers")
+async def generate_stickers_endpoint(
+    since: Optional[str] = None,
+    after: Optional[str] = None
+):
+    """Generate stickers PDF from uploaded CSV with optional date/order filters"""
+    try:
+        csv_file = "data.csv"
+        if not os.path.exists(csv_file):
+            raise HTTPException(status_code=404, detail="No CSV file uploaded yet")
+        
+        # Generate output filename based on input
+        csv_basename = os.path.splitext(os.path.basename(csv_file))[0]
+        output_file = f"{csv_basename}-stickers.pdf"
+        
+        logger.info(f"Generating stickers: csv={csv_file}, output={output_file}, since={since}, after={after}")
+        
+        # Generate stickers
+        generate_stickers(
+            csv_file=csv_file,
+            output_file=output_file,
+            config_file="config.yaml",
+            debug=False,
+            since=since,
+            after=after
+        )
+        
+        if not os.path.exists(output_file):
+            raise HTTPException(status_code=500, detail="Failed to generate stickers PDF")
+        
+        logger.info(f"Stickers generated successfully: {output_file}")
+        return {"message": "Stickers generated successfully", "filename": output_file}
+    
+    except Exception as e:
+        logger.error(f"Error generating stickers: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/download-stickers/{filename}")
+async def download_stickers(filename: str):
+    """Download the generated stickers PDF"""
+    if not filename.endswith("-stickers.pdf"):
+        raise HTTPException(status_code=400, detail="Invalid stickers filename")
+    
+    if not os.path.exists(filename):
+        raise HTTPException(status_code=404, detail="Stickers file not found")
+    
+    return FileResponse(
+        filename,
+        media_type="application/pdf",
+        filename=filename
+    )
 
 if __name__ == "__main__":
     import uvicorn

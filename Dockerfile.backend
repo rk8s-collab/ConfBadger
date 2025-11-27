@@ -20,7 +20,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend application
-COPY app.py confbadger.py config.yaml ./
+COPY app.py confbadger.py config.yaml generate_stickers.py ./
 
 # Create necessary directories
 RUN mkdir -p badges codes temp flags fonts
