@@ -133,7 +133,7 @@ sticker-labels:
   
   # Text truncation limits (approximate character counts)
   truncate:
-    first-name: 15
+    first-name: 12
     last-name: 18
     title: 35
     company: 35
