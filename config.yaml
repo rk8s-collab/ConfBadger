@@ -100,7 +100,7 @@ sticker-labels:
   # Paper and label dimensions
   sheet-width: 210         # A4 width in mm
   sheet-height: 297        # A4 height in mm
-  label-width: 105         # Label width in mm (Buroline 500028)
+  label-width: 104.5         # Label width in mm (Buroline 500028)
   label-height: 42.3       # Label height in mm
   columns: 2               # Number of columns
   rows: 7                  # Number of rows (14 labels total)
@@ -109,18 +109,18 @@ sticker-labels:
   # Margins
   left-margin: 0           # Sheet left margin in mm
   right-margin: 0          # Sheet right margin in mm
-  top-margin: 0.45         # Sheet top margin in mm
-  bottom-margin: 0.45      # Sheet bottom margin in mm
+  top-margin: 0         # Sheet top margin in mm
+  bottom-margin: 0.9      # Sheet bottom margin in mm
   row-gap: 0               # Gap between rows in mm
-  column-gap: 0            # Gap between columns in mm
+  column-gap: 1            # Gap between columns in mm
   
   # Label content layout
   layout:
     qr-margin: 3           # Margin around QR code in points
-    text-left-margin: 5    # Left margin for text in points
-    text-top-margin: 26    # Top margin for text in points
+    text-left-margin: 10    # Left margin for text in points
+    text-top-margin: 30    # Top margin for text in points
     qr-text-gap: 5         # Gap between text and QR code in points
-    name-gap: 3            # Gap between first and last name in points
+    name-gap: -5            # Gap between first and last name in points
     name-info-gap: 4       # Gap between names and title/company in points
   
   # Font sizes (in points)
@@ -140,5 +140,6 @@ sticker-labels:
   
   # Banner (attendee type bar)
   banner:
-    height: 28             # Height of banner in points
-    bottom-margin: 0       # Margin from bottom edge in points
+    height: 34             # Height of banner in points
+    bottom-margin: 3       # Margin from bottom edge in points
+    left-margin: 3     # Margin from left edge in points
