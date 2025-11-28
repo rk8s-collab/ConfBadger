@@ -85,6 +85,7 @@ def draw_label(label, width, height, obj):
     qr_margin = layout.get('qr-margin', 3)
     left_margin = layout.get('text-left-margin', 5)
     top_margin = layout.get('text-top-margin', 22)
+    name_gap = layout.get('name-gap', 3)
     qr_text_gap = layout.get('qr-text-gap', 5)
     
     first_name_size = fonts.get('first-name-size', 24)
@@ -160,7 +161,7 @@ END:VCARD'''
         first_display = ' '.join(words)
     label.add(shapes.String(left_margin, y_pos, first_display, 
                            fontName=name_font, fontSize=first_name_size, fillColor=black))
-    y_pos -= (first_name_size + 2)  # Space after first name
+    y_pos -= (first_name_size + name_gap)  # Space after first name, now configurable
     
     # Last Name (medium, red, bold)
     # Truncate by removing middle words if too long
