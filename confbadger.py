@@ -185,6 +185,13 @@ END:VCARD'''
             color = str_to_tuple(next((item["color"] for item in config_data["attendee-types"] if item.get("name") == "Attendee"), None))
             background_size = next((item["background-size"] for item in config_data["attendee-types"] if item.get("name") == "Attendee"), None)
             for attendee in config_data["attendee-types"]:
+                    # Check email override first
+                    if email.lower() in [e.lower() for e in attendee.get("email-overrides", [])]:
+                            logger.debug(f"name: {firstname} {lastname}, ticket type: {attendee['name']} (email override)")
+                            attendee_type = attendee["name"]
+                            color = str_to_tuple(attendee["color"])
+                            break
+                    # Then check ticket title
                     if ticket_title in attendee["ticket-titles"]:
                             logger.debug(f"name: {firstname} {lastname}, ticket type: {attendee['name']}")
                             attendee_type = attendee["name"]

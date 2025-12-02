@@ -207,6 +207,15 @@ END:VCARD'''
     
     if config_data and 'attendee-types' in config_data:
         for atype in config_data['attendee-types']:
+            # Check email override first
+            if email and email.lower() in [e.lower() for e in atype.get('email-overrides', [])]:
+                attendee_type = atype['name'].upper()
+                # Parse color from config (format: "R, G, B")
+                color_str = atype.get('color', '159, 219, 255')
+                rgb_parts = [int(x.strip()) for x in color_str.split(',')]
+                bar_color = colors.Color(rgb_parts[0]/255, rgb_parts[1]/255, rgb_parts[2]/255)
+                break
+            # Then check ticket title
             if ticket_title in atype.get('ticket-titles', []):
                 attendee_type = atype['name'].upper()
                 # Parse color from config (format: "R, G, B")
