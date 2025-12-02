@@ -101,6 +101,7 @@ def draw_label(label, width, height, obj):
     
     bar_height = banner_config.get('height', 25)
     banner_bottom_margin = banner_config.get('bottom-margin', 3)
+    banner_left_margin = banner_config.get('left-margin', 0)
     
     # Font setup
     try:
@@ -216,15 +217,17 @@ END:VCARD'''
     
     # Bottom colored bar with attendee type - only extends to QR code
     # Add bottom margin to lift the bar off the bottom edge
-    bar_rect = shapes.Rect(0, banner_bottom_margin, qr_x_pos, bar_height, 
+    # Adjust width for left margin
+    bar_width = qr_x_pos - banner_left_margin
+    bar_rect = shapes.Rect(banner_left_margin, banner_bottom_margin, bar_width, bar_height, 
                           fillColor=bar_color, strokeColor=None)
     label.add(bar_rect)
-    
+
     # Center the attendee type text in the colored bar (not including QR area)
     type_string = shapes.String(0, banner_bottom_margin + bar_height/2 - (banner_size/2 - 2), attendee_type,
                                fontName=name_font, fontSize=banner_size, fillColor=white,
                                textAnchor='middle')
-    type_string.x = qr_x_pos / 2
+    type_string.x = banner_left_margin + bar_width / 2
     label.add(type_string)
 
 
