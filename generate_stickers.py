@@ -301,7 +301,7 @@ def create_label_specification(config_data=None):
 
 
 def generate_stickers(csv_file='data.csv', output_file='stickers.pdf', 
-                      config_file='config.yaml', debug=False, since=None, after=None):
+                      config_file='config.yaml', debug=False, since=None, after=None, after_file=None):
     """
     Generate sticker labels from CSV file
     
@@ -312,6 +312,7 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf',
         debug: If True, show label borders for debugging layout
         since: Only generate labels for registrations on or after this date (YYYY-MM-DD format)
         after: Order or ticket number - generates labels for registrations from this order's date onwards
+        after_file: CSV file - extract most recent date and use as since parameter
     """
     logger.info(f"Reading data from {csv_file}")
     
@@ -320,6 +321,25 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf',
         df = pd.read_csv(csv_file)
         # Fill NaN values
         df = df.fillna('')
+        
+        # If --after-file is specified, extract the most recent date from that file
+        if after_file:
+            try:
+                logger.info(f"Reading dates from {after_file}")
+                df_after = pd.read_csv(after_file)
+                if 'Paid date (UTC)' in df_after.columns:
+                    df_after['Paid date (UTC)'] = pd.to_datetime(df_after['Paid date (UTC)'], errors='coerce')
+                    # Get the most recent date (max)
+                    max_date = df_after['Paid date (UTC)'].max()
+                    if pd.notna(max_date):
+                        since = max_date
+                        logger.info(f"Most recent date in {after_file}: {max_date}, using as --since filter")
+                    else:
+                        logger.warning(f"No valid dates found in {after_file}")
+                else:
+                    logger.warning(f"'Paid date (UTC)' column not found in {after_file}, ignoring --after-file")
+            except Exception as e:
+                logger.error(f"Error reading --after-file {after_file}: {e}")
         
         # Convert date column first if needed for filtering
         if (since or after) and 'Paid date (UTC)' in df.columns:
@@ -350,10 +370,11 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf',
                 if isinstance(since, str):
                     since_date = pd.to_datetime(since).tz_localize('UTC')
                 else:
-                    since_date = since  # Already a datetime from --after
+                    since_date = since  # Already a datetime from --after or --after-file
                 original_count = len(df)
-                df = df[df['Paid date (UTC)'] >= since_date]
-                logger.info(f"Filtered from {original_count} to {len(df)} registrations since {since_date}")
+                # Use > (exclusive) instead of >= to exclude the reference date
+                df = df[df['Paid date (UTC)'] > since_date]
+                logger.info(f"Filtered from {original_count} to {len(df)} registrations after {since_date} (exclusive)")
             else:
                 logger.warning("'Paid date (UTC)' column not found, ignoring --since filter")
         
@@ -421,10 +442,12 @@ def main():
                        help='Only generate labels for registrations on or after this date (YYYY-MM-DD)')
     parser.add_argument('--after', type=str,
                        help='Order/ticket number - generates labels from this order\'s registration date onwards')
+    parser.add_argument('--after-file', type=str,
+                       help='CSV file - extract most recent date and use as --since filter')
     
     args = parser.parse_args()
     
-    generate_stickers(args.data, args.output, args.config, args.debug, args.since, args.after)
+    generate_stickers(args.data, args.output, args.config, args.debug, args.since, args.after, args.after_file)
 
 
 if __name__ == '__main__':
