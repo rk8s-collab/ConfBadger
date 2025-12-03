@@ -344,6 +344,12 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf',
         # Convert date column first if needed for filtering
         if (since or after) and 'Paid date (UTC)' in df.columns:
             df['Paid date (UTC)'] = pd.to_datetime(df['Paid date (UTC)'], errors='coerce')
+            # Fill NaN dates with current timestamp
+            now = pd.Timestamp.now(tz='UTC')
+            null_count = df['Paid date (UTC)'].isna().sum()
+            if null_count > 0:
+                logger.info(f"Found {null_count} entries without dates, defaulting to current time: {now}")
+                df['Paid date (UTC)'] = df['Paid date (UTC)'].fillna(now)
         
         # If --after is specified, find the registration date for that order/ticket and use it as --since
         if after:
