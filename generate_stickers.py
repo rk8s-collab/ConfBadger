@@ -73,6 +73,7 @@ def draw_label(label, width, height, obj):
     title = obj.get('Title', '')
     ticket_title = obj.get('Ticket title', '')
     email = obj.get('Email', '')
+    ticket_number = obj.get('Ticket number', '')
     config_data = obj.get('_config', {})
     
     # Get layout settings from config
@@ -238,6 +239,19 @@ END:VCARD'''
                                textAnchor='middle')
     type_string.x = banner_left_margin + bar_width / 2
     label.add(type_string)
+    
+    # Add ticket number in bottom right corner for debugging
+    if ticket_number:
+        ticket_num_size = 6  # Small font for debugging
+        ticket_num_text = f"#{ticket_number}"
+        # Center align with QR code
+        ticket_num_x = qr_x_pos + qr_size / 2  # Center with QR code
+        ticket_num_y = banner_bottom_margin  # Align with bottom of banner
+        ticket_string = shapes.String(0, ticket_num_y, ticket_num_text,
+                                     fontName=regular_font, fontSize=ticket_num_size,
+                                     fillColor=colors.gray, textAnchor='middle')
+        ticket_string.x = ticket_num_x
+        label.add(ticket_string)
 
 
 def create_label_specification(config_data=None):
@@ -376,6 +390,7 @@ def generate_stickers(csv_file='data.csv', output_file='stickers.pdf',
             'Title': row.get('Title', ''),
             'Email': row.get('Email', ''),
             'Ticket title': row.get('Ticket title', ''),
+            'Ticket number': row.get('Ticket number', ''),
             '_config': config_data  # Pass config to draw function
         }
         sheet.add_label(attendee_data)
