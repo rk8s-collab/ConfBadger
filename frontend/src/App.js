@@ -43,6 +43,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [stickerFilters, setStickerFilters] = useState({
+    since: '',
+    after: '',
+  });
+  const [generatingStickers, setGeneratingStickers] = useState(false);
 
   useEffect(() => {
     fetchBadges();
@@ -161,6 +166,28 @@ function App() {
     const order_number = String(attendee['Order number']).split('.')[0];
     const badgeFilename = `${attendee['Last Name']}_${attendee['First Name']}_${order_number}.pdf`;
     window.open(`${API_BASE_URL}/badge/${badgeFilename}`, '_blank');
+  };
+
+  const handleGenerateStickers = async () => {
+    setGeneratingStickers(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const params = {};
+      if (stickerFilters.since) params.since = stickerFilters.since;
+      if (stickerFilters.after) params.after = stickerFilters.after;
+
+      const response = await axios.post(`${API_BASE_URL}/generate-stickers`, null, { params });
+      setSuccess(`Stickers generated: ${response.data.filename}`);
+      
+      // Automatically download the file
+      window.open(`${API_BASE_URL}/download-stickers/${response.data.filename}`, '_blank');
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to generate stickers');
+    } finally {
+      setGeneratingStickers(false);
+    }
   };
 
   return (
@@ -289,6 +316,49 @@ function App() {
               fullWidth
             >
               Clear Search
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          Generate Sticker Labels
+        </Typography>
+        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+          Generate printable sticker labels (14 per A4 sheet) for all attendees. Optionally filter by date or order number.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Since Date (YYYY-MM-DD)"
+              type="date"
+              value={stickerFilters.since}
+              onChange={(e) => setStickerFilters({ ...stickerFilters, since: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              helperText="Only include registrations on or after this date"
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="After Order/Ticket Number"
+              value={stickerFilters.after}
+              onChange={(e) => setStickerFilters({ ...stickerFilters, after: e.target.value })}
+              helperText="Only include registrations from this order's date onwards"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={generatingStickers ? <CircularProgress size={20} /> : <DownloadIcon />}
+              onClick={handleGenerateStickers}
+              disabled={generatingStickers || !file}
+              fullWidth
+            >
+              {generatingStickers ? 'Generating Stickers...' : 'Generate & Download Stickers PDF'}
             </Button>
           </Grid>
         </Grid>

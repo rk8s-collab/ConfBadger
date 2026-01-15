@@ -39,7 +39,7 @@ def main():
                             help='List of attendees in the CSV format as exported from Bevy. Default is data.csv')
     parser.add_argument('--save-path', default="./codes",
                             help='Path to save the generated badges. Default is ./codes')
-    parser.add_argument('--template', default="KCDAMS2023_Badge_Template.png",
+    parser.add_argument('--template', default="badge_template.png",
                             help='Template for the badges. Default is the example KCDAMS2023_Badge_Template.png file')
     parser.add_argument('--config', default="config.yaml",
                             help='Config file. Default is config.yaml.')
@@ -86,7 +86,7 @@ def main():
                 config_file,
                 pre_order_data)
 
-def createBadge(template = "KCDAMS2023_Badge_Template.png",
+def createBadge(template = "badge_template.png",
                 save_path = "codes",
                 data_file = "data.csv",
                 config_file = "config.yaml", 
@@ -185,6 +185,13 @@ END:VCARD'''
             color = str_to_tuple(next((item["color"] for item in config_data["attendee-types"] if item.get("name") == "Attendee"), None))
             background_size = next((item["background-size"] for item in config_data["attendee-types"] if item.get("name") == "Attendee"), None)
             for attendee in config_data["attendee-types"]:
+                    # Check email override first
+                    if email.lower() in [e.lower() for e in attendee.get("email-overrides", [])]:
+                            logger.debug(f"name: {firstname} {lastname}, ticket type: {attendee['name']} (email override)")
+                            attendee_type = attendee["name"]
+                            color = str_to_tuple(attendee["color"])
+                            break
+                    # Then check ticket title
                     if ticket_title in attendee["ticket-titles"]:
                             logger.debug(f"name: {firstname} {lastname}, ticket type: {attendee['name']}")
                             attendee_type = attendee["name"]
