@@ -14,3 +14,8 @@ uvicorn==0.27.1
 python-multipart==0.0.9
 pylabels==1.2.1
 reportlab==4.0.7
+brother_ql==0.9.4
+
+# Test-only: decodes the rendered QR to prove the ticket number survives
+# intact. Not needed to print.
+opencv-python-headless==5.0.0.93
