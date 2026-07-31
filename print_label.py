@@ -30,13 +30,13 @@ def normalise_printer(identifier):
     return identifier
 
 
-def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0):
+def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0, label=LABEL):
     qlr = BrotherQLRaster(MODEL)
     qlr.exception_on_warning = True
     return convert(
         qlr=qlr,
         images=[render_label(first_name, ticket_number)],
-        label=LABEL,
+        label=label,
         rotate=rotate,
         threshold=threshold,
         dither=False,
@@ -56,6 +56,12 @@ def main():
         help="tcp://<ip>:9100 for network, or usb://0x04f9:<product-id> for USB",
     )
     parser.add_argument("--backend", choices=["network", "pyusb", "linux_kernel"])
+    parser.add_argument(
+        "--label",
+        default=LABEL,
+        choices=["62x29", "62"],
+        help="62x29 for DK-11209 die-cut, or 62 for DK-22205 continuous tape",
+    )
     parser.add_argument(
         "--rotate",
         type=int,
@@ -79,7 +85,11 @@ def main():
     args = parser.parse_args()
 
     instructions = build_instructions(
-        args.name, args.ticket, threshold=args.threshold, rotate=args.rotate
+        args.name,
+        args.ticket,
+        threshold=args.threshold,
+        rotate=args.rotate,
+        label=args.label,
     )
 
     if args.dry_run:

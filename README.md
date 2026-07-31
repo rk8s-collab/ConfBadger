@@ -172,8 +172,11 @@ It is possible to generate the badges using `python3 confbadger.py`. Command lin
 
 ## Check-in labels on a Brother QL-810W
 
-`label_render.py` renders a single peel-and-stick label for **DK-11202 die-cut
+`label_render.py` renders a single peel-and-stick label for **DK-11209 die-cut
 stock (62 x 29mm)**: attendee first name plus a QR of the bare ticket number.
+Note DK-11202 is a different product — 62 x 100mm shipping labels — and the
+printer rejects it with "Replace media error" against this layout. DK-22205
+(62mm continuous) also works, via `--label 62`.
 Nothing else goes on it — last name, company and the attendee-type banner are
 already on the pre-printed card. This is separate from the A4 sticker sheet
 produced by `generate_stickers.py`.
