@@ -188,13 +188,23 @@ python3 test_label_render.py
 
 ### Printing
 
-Install the printing dependency and find the printer:
+Install the printing dependency:
 
 ```bash
 pip install brother_ql
-brother_ql discover                       # network printers
-brother_ql --backend pyusb discover       # USB (macOS also needs: brew install libusb)
 ```
+
+Find the printer. **USB is discoverable, network is not** — `discover` raises
+`NotImplementedError` on the network backend, so the IP has to come from
+elsewhere:
+
+```bash
+brother_ql --backend pyusb discover   # macOS also needs: brew install libusb
+lpstat -v                             # if already added to macOS, shows the device URI
+```
+
+Otherwise take the address from the router's DHCP table, and give the printer a
+reservation so it survives a reboot at the venue.
 
 Then print:
 
