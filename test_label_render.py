@@ -56,6 +56,22 @@ try:
 except ImportError:
     print("  skip (opencv not installed; pip install opencv-python-headless)")
 
+print("usb identifier from discover is usable")
+from print_label import normalise_printer
+
+check(
+    "serial suffix dropped",
+    normalise_printer("usb://0x04f9:0x209c_Љ") == "usb://0x04f9:0x209c",
+)
+check(
+    "plain identifier untouched",
+    normalise_printer("usb://0x04f9:0x209c") == "usb://0x04f9:0x209c",
+)
+check(
+    "tcp identifier untouched",
+    normalise_printer("tcp://192.168.1.50:9100") == "tcp://192.168.1.50:9100",
+)
+
 print("brother_ql accepts the raster for a QL-810W")
 try:
     from brother_ql.conversion import convert

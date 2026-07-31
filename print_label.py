@@ -20,6 +20,16 @@ MODEL = "QL-810W"
 LABEL = "62x29"
 
 
+def normalise_printer(identifier):
+    """brother_ql's discover prints usb://vendor:product_serial, but its pyusb
+    backend parses usb://vendor:product/serial and chokes on the underscore
+    form. Vendor and product alone identify the printer, so drop the serial.
+    """
+    if identifier and identifier.startswith("usb://") and "_" in identifier:
+        return identifier.split("_", 1)[0]
+    return identifier
+
+
 def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0):
     qlr = BrotherQLRaster(MODEL)
     qlr.exception_on_warning = True
@@ -81,9 +91,13 @@ def main():
     if not args.printer:
         parser.error("--printer is required unless --dry-run is used")
 
+    printer = normalise_printer(args.printer)
+    if printer != args.printer:
+        print(f"using {printer} (dropped the serial discover appended)")
+
     status = send(
         instructions=instructions,
-        printer_identifier=args.printer,
+        printer_identifier=printer,
         backend_identifier=args.backend,
         blocking=True,
     )
