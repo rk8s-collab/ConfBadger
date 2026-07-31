@@ -177,7 +177,8 @@ ConfBadger/
 ├── app.py                 # FastAPI backend
 ├── confbadger.py          # Badge generation logic
 ├── requirements.txt       # Python dependencies
-├── data.csv               # Sample CSV file
+├── data.sample.csv        # Anonymised sample; copy to data.csv to try it
+├── label_render.py        # Single DK-11202 check-in label for the QL-810W
 ├── KCDAMS2023_Badge_Template.png  # Badge template
 ├── frontend/              # React frontend
 │   ├── package.json
