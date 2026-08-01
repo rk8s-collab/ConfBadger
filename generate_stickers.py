@@ -103,6 +103,9 @@ def draw_label(label, width, height, obj):
     bar_height = banner_config.get('height', 25)
     banner_bottom_margin = banner_config.get('bottom-margin', 3)
     banner_left_margin = banner_config.get('left-margin', 0)
+
+    qr_status = config_data.get('sticker-labels', {}).get('qr-code', {}).get('status', 'vcard')
+    show_ticket_number = config_data.get('sticker-labels', {}).get('show-ticket-number', True)
     
     # Font setup
     try:
@@ -122,8 +125,13 @@ def draw_label(label, width, height, obj):
     qr_size = height - (2 * qr_margin)  # Square QR code with margins
     qr_x_pos = width - qr_size - qr_margin  # Position on the right with margin
     
-    # Generate QR code with vCard data
-    vcard_data = f'''BEGIN:VCARD
+    # Payload follows confbadger.py's qr-code.status vocabulary. "hash" emits the
+    # bare ticket number: it is the join key back to the ticketing export, so it
+    # is encoded verbatim and carries no contact details.
+    if qr_status == 'hash':
+        qr_data = str(ticket_number)
+    else:
+        qr_data = f'''BEGIN:VCARD
 N:{lastname};{firstname};
 FN:{firstname} {lastname}
 TITLE:{title}
@@ -131,8 +139,8 @@ EMAIL;WORK;INTERNET:{email}
 ORG:{company}
 VERSION:3.0
 END:VCARD'''
-    
-    qrcode = pyqrcode.create(unicodedata.normalize('NFKD', vcard_data).encode('ascii', 'ignore').decode('ascii'))
+
+    qrcode = pyqrcode.create(unicodedata.normalize('NFKD', qr_data).encode('ascii', 'ignore').decode('ascii'))
     
     # Save QR code to temporary file
     with tempfile.NamedTemporaryFile(mode='wb', suffix='.png', delete=False) as tmp_file:
@@ -241,7 +249,7 @@ END:VCARD'''
     label.add(type_string)
     
     # Add ticket number in bottom right corner for debugging
-    if ticket_number:
+    if ticket_number and show_ticket_number:
         ticket_num_size = 6  # Small font for debugging
         ticket_num_text = f"#{ticket_number}"
         # Center align with QR code
