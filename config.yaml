@@ -97,6 +97,22 @@ qr-code:
 
 # Label sheet specifications for stickers
 sticker-labels:
+  # Set to false to hide the sticker-sheet generator in the web UI and disable
+  # its endpoints. Use this when badges are pre-printed and sheets must not be
+  # produced by mistake.
+  enabled: false
+
+  # QR payload, using the same vocabulary as the top-level qr-code block:
+  #   vcard - name, title, email and company (the default)
+  #   hash  - the bare ticket number and nothing else
+  # KCD Melbourne 2026 uses hash so a scanned label exposes no contact details.
+  qr-code:
+    status: "hash"
+
+  # Print the ticket number in small grey text under the QR, for checking that a
+  # sheet lines up with the export. Off here: it is not wanted on a finished badge.
+  show-ticket-number: false
+
   # Paper and label dimensions
   sheet-width: 210         # A4 width in mm
   sheet-height: 297        # A4 height in mm

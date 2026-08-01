@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>KCD Melbourne — Check-in</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f2f2f7;
+      --surface: #fff;
+      --border: #d1d1d6;
+      --text: #1c1c1e;
+      --sub: #6e6e73;
+      --accent: #0071e3;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px 14px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    #q {
+      display: block;
+      width: 100%;
+      padding: 13px 16px;
+      font-size: 18px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    #q:focus { border-color: var(--accent); }
+
+    #status {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--sub);
+      font-size: 16px;
+    }
+
+    #results {
+      list-style: none;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #results li {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+    }
+
+    .info { flex: 1; min-width: 0; }
+
+    .name {
+      font-size: 20px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 5px;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Attendee type badge */
+    .type {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+      background: #8e8e93;
+      color: #fff;
+    }
+    .type--earlybird  { background: #34c759; }
+    .type--standard   { background: #0071e3; }
+    .type--volunteer  { background: #ff9500; }
+    .type--organizer,
+    .type--organiser  { background: #bf5af2; }
+    .type--student    { background: #5856d6; }
+    .type--late       { background: #ff3b30; }
+
+    .company {
+      font-size: 14px;
+      color: var(--sub);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Print button */
+    .print-btn {
+      flex-shrink: 0;
+      min-width: 88px;
+      padding: 13px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      text-align: center;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .print-btn:disabled { opacity: 0.65; cursor: default; }
+    .print-btn.ok  { background: #34c759; }
+    .print-btn.err { background: #ff3b30; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>KCD Melbourne &mdash; Check-in</h1>
+  <input id="q" type="search" placeholder="Search name&hellip;"
+         autocomplete="off" autocorrect="off" autocapitalize="off"
+         spellcheck="false" autofocus>
+</header>
+
+<p id="status">Start typing to search.</p>
+<ul id="results" hidden></ul>
+
+<script>
+  const qEl      = document.getElementById('q');
+  const resultEl = document.getElementById('results');
+  const statusEl = document.getElementById('status');
+  let timer;
+
+  qEl.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(doSearch, 280);
+  });
+
+  async function doSearch() {
+    const q = qEl.value.trim();
+    if (!q) {
+      resultEl.hidden = true;
+      resultEl.innerHTML = '';
+      statusEl.textContent = 'Start typing to search.';
+      statusEl.hidden = false;
+      return;
+    }
+    try {
+      const res  = await fetch('/checkin/search?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.statusText);
+      if (data.length === 0) {
+        resultEl.hidden = true;
+        resultEl.innerHTML = '';
+        statusEl.textContent = 'No results for “' + q + '”.';
+        statusEl.hidden = false;
+      } else {
+        statusEl.hidden = true;
+        resultEl.innerHTML = data.map(renderRow).join('');
+        resultEl.hidden = false;
+      }
+    } catch (e) {
+      statusEl.textContent = 'Search error: ' + e.message;
+      statusEl.hidden = false;
+    }
+  }
+
+  function typeClass(t) {
+    const s = (t || '').toLowerCase();
+    if (s.includes('volunteer'))              return 'volunteer';
+    if (s.includes('early'))                  return 'earlybird';
+    if (s.includes('standard'))               return 'standard';
+    if (s.includes('organis') || s.includes('organiz')) return 'organizer';
+    if (s.includes('student'))                return 'student';
+    if (s.includes('late'))                   return 'late';
+    return '';
+  }
+
+  function renderRow(a) {
+    const cls = typeClass(a.attendee_type);
+    return `<li data-ticket="${esc(a.ticket_number)}" data-name="${esc(a.first_name)}">
+      <div class="info">
+        <div class="name">${esc(a.first_name)} ${esc(a.last_name)}</div>
+        <div class="meta">
+          <span class="type${cls ? ' type--' + cls : ''}">${esc(a.attendee_type || '–')}</span>
+          ${a.company ? `<span class="company">${esc(a.company)}</span>` : ''}
+        </div>
+      </div>
+      <button class="print-btn">Print</button>
+    </li>`;
+  }
+
+  resultEl.addEventListener('click', async e => {
+    const btn = e.target.closest('.print-btn');
+    if (!btn || btn.classList.contains('ok')) return;
+    const li     = btn.closest('li');
+    const ticket = li.dataset.ticket;
+    const name   = li.dataset.name;
+    btn.disabled = true;
+    btn.textContent = 'Printing…';
+    btn.classList.remove('err');
+    try {
+      const res = await fetch('/checkin/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_number: ticket, first_name: name }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || res.statusText);
+      }
+      btn.textContent = '✓ Done';
+      btn.classList.add('ok');
+    } catch (err) {
+      btn.textContent = 'Error';
+      btn.classList.add('err');
+      btn.disabled = false;
+      console.error('print error:', err.message);
+    }
+  });
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>

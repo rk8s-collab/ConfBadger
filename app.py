@@ -2,12 +2,19 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import os
+import subprocess
+import tempfile
 from typing import Optional
 import shutil
+from pydantic import BaseModel
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
 from generate_stickers import generate_stickers
+from label_render import DPI, render_label
 import logging
 import glob
+import yaml
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
 
 app = FastAPI()
 logger = logging.getLogger("uvicorn")
@@ -180,12 +187,33 @@ async def list_directories():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def stickers_enabled():
+    try:
+        with open("config.yaml") as f:
+            config_data = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.warning("Could not load config.yaml: %s. Assuming stickers enabled.", e)
+        return True
+    return config_data.get("sticker-labels", {}).get("enabled", True)
+
+
+def require_stickers_enabled():
+    if not stickers_enabled():
+        raise HTTPException(status_code=403, detail="Sticker sheet generation is disabled")
+
+
+@app.get("/features")
+async def features():
+    return {"stickers": stickers_enabled()}
+
+
 @app.post("/generate-stickers")
 async def generate_stickers_endpoint(
     since: Optional[str] = None,
     after: Optional[str] = None
 ):
     """Generate stickers PDF from uploaded CSV with optional date/order filters"""
+    require_stickers_enabled()
     try:
         csv_file = "data.csv"
         if not os.path.exists(csv_file):
@@ -220,6 +248,7 @@ async def generate_stickers_endpoint(
 @app.get("/download-stickers/{filename}")
 async def download_stickers(filename: str):
     """Download the generated stickers PDF"""
+    require_stickers_enabled()
     if not filename.endswith("-stickers.pdf"):
         raise HTTPException(status_code=400, detail="Invalid stickers filename")
     
@@ -232,6 +261,90 @@ async def download_stickers(filename: str):
         filename=filename
     )
 
+# ---------- check-in endpoints (Phase 4 Stage 2) ----------
+
+_CUPS_QUEUE = "Brother_QL_810W"
+_CUPS_PAGE_SIZE = "29x62mm"   # DK-11209 die-cut
+
+DATA_CSV = "data.csv"
+
+
+def _normalise_type(raw: str) -> str:
+    """Map Discount field values to a human label. KCD volunteers use an access
+    code rather than a readable name, so we normalise them here."""
+    s = (raw or "").strip()
+    if "volunteer" in s.lower():
+        return "Volunteer"
+    return s
+
+
+class PrintRequest(BaseModel):
+    first_name: str
+    ticket_number: str
+
+
+@app.get("/checkin")
+async def checkin_page():
+    return FileResponse(os.path.join(_HERE, "checkin.html"))
+
+
+@app.get("/checkin/search")
+async def checkin_search(q: str = ""):
+    q = q.strip()
+    if not q:
+        return []
+    if not os.path.exists(DATA_CSV):
+        raise HTTPException(status_code=503, detail="No attendee data loaded — upload data.csv first")
+    df = read_data_file(DATA_CSV)
+    ql = q.lower()
+    mask = (
+        df["First Name"].str.lower().str.contains(ql, na=False, regex=False)
+        | df["Last Name"].str.lower().str.contains(ql, na=False, regex=False)
+    )
+    rows = df[mask].head(20)
+    return [
+        {
+            "ticket_number": str(row["Ticket number"]),
+            "first_name": str(row["First Name"]).strip(),
+            "last_name": str(row["Last Name"]).strip(),
+            "company": str(row.get("Company", "") or "").strip(),
+            "attendee_type": _normalise_type(str(row.get("Discount", "") or "")),
+        }
+        for _, row in rows.iterrows()
+    ]
+
+
+@app.post("/checkin/print")
+async def checkin_print(req: PrintRequest):
+    if not req.first_name.strip():
+        raise HTTPException(status_code=400, detail="first_name is required")
+    if not req.ticket_number.strip():
+        raise HTTPException(status_code=400, detail="ticket_number is required")
+    try:
+        image = render_label(req.first_name.strip(), req.ticket_number.strip())
+        handle, path = tempfile.mkstemp(prefix="confbadger-", suffix=".png")
+        os.close(handle)
+        try:
+            image.save(path, dpi=(DPI, DPI))
+            argv = [
+                "lp", "-d", _CUPS_QUEUE,
+                "-o", f"PageSize={_CUPS_PAGE_SIZE}",
+                "-o", f"ppi={DPI}",
+                "-o", "ColorModel=Gray",
+                "-o", "CutMedia=EndOfPage",
+                path,
+            ]
+            result = subprocess.run(argv, capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                raise RuntimeError((result.stderr or result.stdout).strip())
+        finally:
+            os.unlink(path)
+    except Exception as exc:
+        logger.error("print failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True, "job": result.stdout.strip()}
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="0.0.0.0", port=8000)
