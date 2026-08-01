@@ -28,14 +28,28 @@ def opcode_name(instruction):
         return "unknown"
 
 
-def show_status(backend, label):
-    try:
-        data = backend.read()
-    except Exception as exc:
-        print(f"  {label:<28} (no status: {type(exc).__name__})")
-        return None
+def read_frame(backend, timeout_ms):
+    """brother_ql's own read gives up almost immediately and its 'select'
+    strategy is broken (pyusb.py calls select.select without importing it), so
+    poll the backend ourselves until the deadline.
+    """
+    deadline = time.time() + timeout_ms / 1000.0
+    while True:
+        try:
+            data = backend.read()
+            if data:
+                return data
+        except Exception:
+            pass
+        if time.time() >= deadline:
+            return b""
+        time.sleep(0.05)
+
+
+def show_status(backend, label, timeout_ms):
+    data = read_frame(backend, timeout_ms)
     if not data:
-        print(f"  {label:<28} (no status)")
+        print(f"  {label:<28} (silent)")
         return None
     try:
         s = interpret_response(data)
@@ -68,14 +82,12 @@ def main():
 
     printer = normalise_printer(args.printer)
     backend = backend_factory(args.backend)["backend_class"](printer)
-    backend.read_timeout = args.read_timeout
-    if hasattr(backend, "strategy"):
-        backend.strategy = "select"
+    # Leave backend.strategy alone: brother_ql's 'select' path is broken.
     print(f"opened {printer} via {args.backend}, read timeout {args.read_timeout:.0f}ms\n")
 
     backend.write(STATUS_REQUEST)
     time.sleep(0.3)
-    show_status(backend, "idle")
+    show_status(backend, "idle", args.read_timeout)
 
     if not args.send:
         backend.dispose()
@@ -104,18 +116,18 @@ def main():
             backend.write(pending_raster)
             print(f"  -> raster data ({len(pending_raster)} bytes)")
             time.sleep(0.3)
-            show_status(backend, "after raster")
+            show_status(backend, "after raster", args.read_timeout)
             pending_raster = b""
 
         backend.write(ins)
         print(f"  -> {name}: {hex_format(ins)}")
         time.sleep(0.3)
-        show_status(backend, f"after {name}")
+        show_status(backend, f"after {name}", args.read_timeout)
 
     print("\npolling for completion")
     for i in range(10):
         time.sleep(1.0)
-        s = show_status(backend, f"poll {i + 1}")
+        s = show_status(backend, f"poll {i + 1}", args.read_timeout)
         if s and s["status_type"] in ("Printing completed", "Error occurred"):
             break
 
