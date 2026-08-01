@@ -1,4 +1,101 @@
-# QL-810W print fault — handoff to Claude on the MacBook
+# QL-810W print fault — RESOLVED 2026-08-01
+
+**Labels print. Use the default backend:**
+
+```bash
+python3 print_label.py --name Rob --ticket CNCFA23236346 --label 62
+```
+
+The fault was never in our renderer, our command stream, the mechanism, the
+cutter, the media or the USB stack. **The printer refuses raw ESC/P raster
+jobs**, and always did. The fix was to stop using the raster protocol and print
+through the printer's AirPrint/IPP queue instead, which is the same path
+P-touch Editor uses and the only path that has ever produced a label here.
+
+Everything below the horizontal rule is the original handoff, kept because the
+diagnostic ordering is still sound. Its *conclusion* — mechanism or power — was
+wrong. See "What actually happened" first.
+
+## What actually happened
+
+Verified on the MacBook with the printer attached over both USB and Wi-Fi.
+
+- **Raw raster fails identically on every transport.** The printer accepts the
+  entire job, reports `Phase change / Printing state` of its own accord, then
+  returns `Error occurred` the instant it receives `1A`, with **both error
+  bytes `00`** — a state Brother's own status tables do not define. Reproduced
+  over pyusb *and* over TCP 9100. Transport is not implicated.
+- **The page counter never moved.** `prtMarkerLifeCount` stayed at 2 across
+  every raster attempt, so none of them ever put ink on tape.
+- **The command stream is spec-correct.** Checked instruction by instruction
+  against Brother's *Raster Command Reference QL-800/810W/820NWB*: `g` (0x67) is
+  the correct opcode for monochrome (`w` is two-colour only, and sending `w`
+  made the printer silently discard the job), 62 mm continuous geometry is
+  12 / 696 / 12 pins at 90 bytes per row, the 35-dot feed margin is the
+  documented minimum, and the `ESC i K` bit mapping is right.
+- **`hrPrinterDetectedErrorState` is `00`.** No jam, no cover, no media-out, no
+  supply fault. The printer is not physically unwell; it is rejecting the job.
+- **AirPrint prints the identical bitmap perfectly**, and the counter increments.
+
+Ruled out by direct experiment, each on a freshly cleared printer: the cutter
+(`--no-cut` fails the same), compression mode (both `M 02` and an explicit
+`M 00` fail the same), the `ESC i z` valid-flag byte (Brother's documented
+`0x86` for continuous tape fails the same as brother_ql's `0xCE`), the raster
+opcode, CUPS contention (no `ipp-usb` process, empty queue), and Editor Lite
+mode (no mass-storage interface; `/Volumes/BROTHER` is an unrelated 2024
+installer disk image).
+
+**Leading explanation, not fully confirmed:** the printer's web UI reports
+`Emulation: P-touch Template` throughout, and SNMP lists four interpreters
+(`PJL`, `ESC/P`, `Raster`, `P-touch Template`). brother_ql sends `ESC i a 01`
+to switch dynamically to raster mode, and the printer never honours it — the
+reported emulation never changes. That would explain acceptance-then-failure
+precisely. Confirming it needs Brother's **Printer Setting Tool** (not
+installed; only P-touch Editor is) to read and set the persistent Command Mode.
+A PJL `ENTER LANGUAGE=RASTER` wrapper was tried and did not help.
+
+**If you want the raster path back**, install Brother's Printer Setting Tool,
+set Command Mode to *Raster*, and retest `--backend pyusb`. Nothing in our code
+needs to change; the raster backends are still wired up. This is optional — the
+CUPS path is fine for the event.
+
+## Operational notes for the venue
+
+- The production command is the one at the top of this file. No `--printer` or
+  `--backend` flag is needed; it defaults to CUPS via the `Brother_QL_810W`
+  queue.
+- `--label 62` for the DK-22205 continuous roll, `--label 62x29` once DK-11209
+  die-cut arrives. Only the flag changes.
+- `ppi=300` is passed deliberately so CUPS places the bitmap 1:1 rather than
+  scaling it to fill the page. **Do not remove it** — any rescale moves the QR
+  module edges off the pixel grid and the code stops decoding reliably.
+- The printer is at **192.168.1.166** (`BRWF44EB4FEE25D.local`, MAC
+  `f4:4e:b4:fe:e2:5d`). Give it a DHCP reservation before the venue.
+- **Port 9100 is write-only on this unit.** It accepts data and never answers,
+  so TCP gives no diagnostics at all. Use SNMP for status instead — it works
+  well and needs no cable:
+  ```bash
+  snmpget -v1 -c public 192.168.1.166 1.3.6.1.2.1.43.16.5.1.2.1.1
+  ```
+- **A latched error does not clear over the wire.** Invalidate + `ESC @` will
+  not do it, even repeated. It needs a button press or a power cycle. Worth
+  knowing at 8 am.
+- Verified end to end: the printed QR scans in the deployed PWA and resolves to
+  the correct ticket number.
+
+## Tooling added
+
+| Command | Purpose |
+| --- | --- |
+| `python3 net_probe.py --host 192.168.1.166` | Decodes a full 32-byte status frame, including the mode byte and error bytes brother_ql discards. Confirms 9100 is write-only on this unit. |
+
+`test_label_render.py` needs `numpy` and `opencv-python-headless`, which are in
+`requirements.txt` but not installed in `venv/`. Install them before relying on
+it.
+
+---
+
+# Original handoff (conclusion superseded — see above)
 
 You are picking this up on the MacBook that has the Brother QL-810W physically
 attached. All the work so far was done on a Linux box with **no printer**, so
