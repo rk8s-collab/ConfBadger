@@ -30,7 +30,7 @@ def normalise_printer(identifier):
     return identifier
 
 
-def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0, label=LABEL):
+def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0, label=LABEL, cut=True):
     qlr = BrotherQLRaster(MODEL)
     qlr.exception_on_warning = True
     return convert(
@@ -43,7 +43,7 @@ def build_instructions(first_name, ticket_number, threshold=70.0, rotate=0, labe
         compress=False,
         red=False,
         hq=True,
-        cut=True,
+        cut=cut,
     )
 
 
@@ -76,6 +76,11 @@ def main():
         help="Black/white cutoff in percent; raise it if the print looks washed out",
     )
     parser.add_argument(
+        "--no-cut",
+        action="store_true",
+        help="Leave the cutter idle; use to tell a jammed blade from a print fault",
+    )
+    parser.add_argument(
         "--dry-run",
         metavar="PATH",
         nargs="?",
@@ -90,6 +95,7 @@ def main():
         threshold=args.threshold,
         rotate=args.rotate,
         label=args.label,
+        cut=not args.no_cut,
     )
 
     if args.dry_run:

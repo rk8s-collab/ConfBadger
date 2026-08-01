@@ -76,6 +76,8 @@ def main():
     parser.add_argument("--send", action="store_true",
                         help="Walk the real job command by command")
     parser.add_argument("--label", default="62", choices=["62x29", "62"])
+    parser.add_argument("--no-cut", action="store_true",
+                        help="Leave the cutter idle to rule out a jammed blade")
     parser.add_argument("--read-timeout", type=float, default=2000.0,
                         help="ms to wait for each status frame; brother_ql defaults to 10")
     args = parser.parse_args()
@@ -93,7 +95,7 @@ def main():
         backend.dispose()
         return
 
-    data = build_instructions("Rob", "CNCFA23236346", label=args.label)
+    data = build_instructions("Rob", "CNCFA23236346", label=args.label, cut=not args.no_cut)
     instructions = chunker(data)
     print(f"\nwalking {len(instructions)} instructions ({len(data)} bytes)\n")
 
