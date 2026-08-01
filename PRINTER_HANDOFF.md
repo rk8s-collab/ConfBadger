@@ -119,10 +119,28 @@ python3 debug_printer.py --printer usb://0x04f9:0x209c --backend pyusb --send --
 goes from `ESC i M 40 / ESC i A 01 / ESC i K 08` down to `ESC i K 00`. If it
 prints without cutting, it is a jammed blade.
 
-**5. Prove the hardware independently of our code.** Print a test label from
-macOS using Brother's own driver or P-touch Editor. If that also fails, it is
-the printer, full stop, and the answer is service or a spare unit — decide fast
-given the event date.
+**5. Prove the hardware independently of our code — the key discriminator.**
+
+`label-test.png` is committed at the repo root. It is the exact bitmap that
+`brother_ql` is failing to print: 696x271px, 300dpi, 58.9 x 22.9mm, name "Rob"
+and a QR that decodes to `CNCFA23236346`. Import it into **P-touch Editor** and
+print it through Brother's own driver.
+
+Set the media to match what is loaded (62mm continuous for DK-22205) and print
+at **100% / actual size with no scaling**, or the QR module edges will land off
+the pixel grid and may not scan.
+
+This single test splits the diagnosis cleanly:
+
+- **P-touch prints it** → mechanism, cutter, power and media are all fine. The
+  fault is in the raw-raster path or the USB transport, and the diagnosis above
+  is wrong. Go back to the protocol with that knowledge, and try the network
+  backend (step 6) next, since it bypasses the USB stack entirely.
+- **P-touch also fails** → it is the printer, full stop. The answer is service or
+  a spare unit. Decide fast given the event date; do not keep debugging.
+
+If it prints, also scan the QR with the deployed PWA to confirm it resolves to
+the right ticket number. That closes the end-to-end check at the same time.
 
 **6. Try the network backend.**
 

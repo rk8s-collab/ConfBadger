@@ -48,6 +48,9 @@ Thumbs.db
 # Only the anonymised samples are tracked. Uploads land on data.csv (app.py),
 # so a real attendee export must never be re-includable here.
 !*.sample.csv
+# The reference label raster, tracked so the exact bitmap under test can be
+# printed through another path (P-touch Editor) to isolate printer faults.
+!label-test.png
 codes/*.png
 badges/*.pdf
 
