@@ -53,6 +53,8 @@ Thumbs.db
 !label-test.png
 codes/*.png
 badges/*.pdf
+# Default --dry-run output: regenerable from print_label.py, never edited by hand.
+label-instructions.bin
 
 # Node
 node_modules/
