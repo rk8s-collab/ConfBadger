@@ -5,6 +5,7 @@ import os
 from typing import Optional
 import shutil
 from pydantic import BaseModel
+from card_types import load_roles, resolve_card_type
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
 from generate_stickers import generate_stickers
 from print_label import print_via_cups, QUEUE, LABEL
@@ -295,15 +296,6 @@ def _record_checkin(ticket_number: str, first_name: str) -> None:
         ])
 
 
-def _normalise_type(raw: str) -> str:
-    """Map Discount field values to a human label. KCD volunteers use an access
-    code rather than a readable name, so we normalise them here."""
-    s = (raw or "").strip()
-    if "volunteer" in s.lower():
-        return "Volunteer"
-    return s
-
-
 class PrintRequest(BaseModel):
     first_name: str
     ticket_number: str
@@ -328,13 +320,16 @@ async def checkin_search(q: str = ""):
         | df["Last Name"].str.lower().str.contains(ql, na=False, regex=False)
     )
     rows = df[mask].head(20)
+    # Re-read on every search: roles.csv gets corrected during the morning as
+    # late volunteers are added, and an edit must take effect without a restart.
+    roles = load_roles()
     return [
         {
             "ticket_number": str(row["Ticket number"]),
             "first_name": str(row["First Name"]).strip(),
             "last_name": str(row["Last Name"]).strip(),
             "company": str(row.get("Company", "") or "").strip(),
-            "attendee_type": _normalise_type(str(row.get("Discount", "") or "")),
+            "card_type": resolve_card_type(row, roles),
         }
         for _, row in rows.iterrows()
     ]

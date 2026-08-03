@@ -223,6 +223,40 @@ Useful flags: `--dry-run` builds the instructions without a printer,
 The raster is generated at exactly 696x271 pixels because `brother_ql` rejects a
 die-cut image of any other size rather than rescaling it.
 
+## Card types at the check-in desk
+
+Five pre-printed cards are stocked — VOLUNTEER, ORGANISER, SPONSOR, SPEAKER and
+ATTENDEE — and the check-in page tells the operator which one to pull, both in
+the search results and again on the print confirmation. The label itself is
+unchanged: first name and QR only.
+
+Who gets which card comes from `roles.csv` in the project root (gitignored;
+copy `roles.sample.csv` to start). Volunteers and organisers are named
+individually because their ticket looks like everyone else's; sponsors and
+speakers are recognised by the discount code they redeemed:
+
+```csv
+card_type,match_type,value
+ORGANISER,email,sam@example.com
+VOLUNTEER,email,jo@example.com
+SPONSOR,discount_code,KCDMEL26_ACME_FREE
+SPEAKER,discount_code,KCDMEL26SPKR
+```
+
+Codes are matched against both the `Discount` and `Access code` columns of the
+export, case-insensitively, and Bevy's `100.00% - CODE` prefix is handled.
+Anyone who matches nothing is an ATTENDEE. Someone who matches twice — an
+organiser who also redeemed a sponsor code — gets the more specific card, in the
+order ORGANISER, VOLUNTEER, SPEAKER, SPONSOR.
+
+The file is re-read on every search, so it can be corrected during the morning
+without restarting the server. A missing or partly malformed `roles.csv` never
+stops the desk: bad rows are logged and skipped, and unmatched people fall
+through to ATTENDEE. Run `python3 test_card_types.py` to check the rules.
+
+Set the `--card-*` colours at the top of `checkin.html` to match the actual card
+stock so the operator can match screen to box without reading a word.
+
 ## Project Structure
 
 ```
@@ -231,6 +265,8 @@ ConfBadger/
 ├── confbadger.py          # Badge generation logic
 ├── requirements.txt       # Python dependencies
 ├── data.sample.csv        # Anonymised sample; copy to data.csv to try it
+├── card_types.py          # Which pre-printed card each attendee gets
+├── roles.sample.csv       # Named volunteers/organisers and sponsor/speaker codes
 ├── label_render.py        # Single DK-11202 check-in label for the QL-810W
 ├── print_label.py         # Sends one rendered label to the QL-810W
 ├── KCDAMS2023_Badge_Template.png  # Badge template
