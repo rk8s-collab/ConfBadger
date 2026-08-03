@@ -4,18 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0086FF">
   <title>KCD Melbourne — Check-in</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #f2f2f7;
+      /* KCD Melbourne brand — sampled from the logo (#0086FF signal blue),
+         matched to the sponsor scanner's palette so both feel like one product. */
+      --brand: #0086FF;
+      --brand-dark: #006CE0;
+      --bg: #eef4fb;          /* faint blue tint of the brand */
       --surface: #fff;
-      --border: #d1d1d6;
-      --text: #1c1c1e;
-      --sub: #6e6e73;
-      --accent: #0071e3;
+      --border: #d3ddea;
+      --text: #10233a;
+      --sub: #5b7085;
+      --accent: #0086FF;
+      --accent-press: #006CE0;
       --radius: 12px;
     }
 
@@ -27,19 +33,20 @@
     }
 
     header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--brand) 0%, var(--brand-dark) 100%);
       padding: 16px 20px 14px;
       position: sticky;
       top: 0;
       z-index: 10;
+      box-shadow: 0 2px 10px rgba(0, 108, 224, 0.25);
     }
 
     h1 {
       font-size: 20px;
       font-weight: 700;
-      color: var(--text);
+      color: #fff;
       margin-bottom: 12px;
+      letter-spacing: 0.01em;
     }
 
     #q {
@@ -47,14 +54,15 @@
       width: 100%;
       padding: 13px 16px;
       font-size: 18px;
-      border: 1.5px solid var(--border);
+      border: 1.5px solid transparent;
       border-radius: var(--radius);
-      background: var(--bg);
+      background: #fff;
       color: var(--text);
       outline: none;
       -webkit-appearance: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
-    #q:focus { border-color: var(--accent); }
+    #q:focus { border-color: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5); }
 
     #status {
       text-align: center;
@@ -111,7 +119,7 @@
       color: #fff;
     }
     .type--earlybird  { background: #34c759; }
-    .type--standard   { background: #0071e3; }
+    .type--standard   { background: var(--accent); }
     .type--volunteer  { background: #ff9500; }
     .type--organizer,
     .type--organiser  { background: #bf5af2; }
@@ -142,6 +150,7 @@
       text-align: center;
       transition: opacity 0.15s, background 0.15s;
     }
+    .print-btn:active:not(:disabled) { background: var(--accent-press); }
     .print-btn:disabled { opacity: 0.65; cursor: default; }
     .print-btn.ok  { background: #34c759; }
     .print-btn.err { background: #ff3b30; }
@@ -199,6 +208,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:active { background: var(--accent-press); }
     .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   </style>
 </head>
