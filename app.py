@@ -79,11 +79,79 @@ async def announce_checkin_url():
     logger.info("Check-in ready. Share this with volunteers (swap in the Mac's LAN IP):")
     logger.info("    http://<mac-ip>:8000/checkin?key=%s", CHECKIN_KEY)
 
-# Note: CSV upload and badge generation are done pre-event from the CLI
-# (confbadger.py) and the file is copied into place by hand. The old
-# /upload-csv, /upload-results-hash and /list-directories endpoints were
-# removed — on the venue WiFi they let anyone overwrite the attendee data or
-# enumerate files. See the security review in check-in-security-review.md.
+# /upload-results-hash and /list-directories were removed — on the venue WiFi
+# they let anyone enumerate files or overwrite scan results. /upload-csv is kept
+# but now requires the shared key, so only an operator can replace the attendee
+# data. See check-in-security-review.md.
+
+@app.post("/upload-csv", dependencies=[Depends(require_key)])
+async def upload_csv(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    logger.info(f"Received file upload: {file.filename}")
+
+    # Basename only — never let an uploaded filename escape temp/.
+    safe_name = os.path.basename(file.filename)
+    temp_file_path = f"temp/{safe_name}"
+    with open(temp_file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    logger.info(f"Saved uploaded file to {temp_file_path}")
+
+    try:
+        # Read the CSV to validate it
+        df = read_data_file(temp_file_path)
+        required_columns = ["Ticket number", "First Name", "Last Name", "Email", "Company", "Title", "Ticket title"]
+
+        logger.info(f"CSV columns: {', '.join(df.columns)}")
+
+        if not all(col in df.columns for col in required_columns):
+            missing = [col for col in required_columns if col not in df.columns]
+            error_msg = f"CSV missing required columns: {', '.join(missing)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        # Move the file to the main directory
+        shutil.move(temp_file_path, "data.csv")
+        logger.info("Moved temp file to data.csv")
+
+        # Generate badges
+        logger.info("Calling createBadge with save_path='codes'")
+        try:
+            badge_count = createBadge(save_path="codes")
+            logger.info(f"createBadge returned: {badge_count} badges created")
+        except Exception as e:
+            logger.error(f"Error using createBadge with save_path='codes': {str(e)}")
+            logger.info("Trying with default parameters...")
+            try:
+                badge_count = createBadge()
+                logger.info(f"Success with default parameters: {badge_count} badges created")
+            except Exception as e2:
+                logger.error(f"Error using createBadge with default parameters: {str(e2)}")
+                # As a last resort, try running the script directly
+                logger.info("Trying with command line execution...")
+                try:
+                    os.system("python3 confbadger.py --data data.csv")
+                    logger.info("Command line execution completed")
+                    badge_count = len(os.listdir("badges"))
+                except Exception as e3:
+                    logger.error(f"Command line execution failed: {str(e3)}")
+                    raise HTTPException(status_code=500, detail=f"Failed to generate badges: {str(e)} -> {str(e2)} -> {str(e3)}")
+
+        # Check if badges were created
+        badge_count = len(os.listdir("badges"))
+        logger.info(f"Badge generation complete. {badge_count} badges in badges/")
+        code_count = len(os.listdir("codes"))
+        logger.info(f"QR code generation complete. {code_count} QR codes in codes/")
+
+        return {"message": f"Badges generated successfully. {badge_count} badges created."}
+    except Exception as e:
+        logger.error(f"Error during badge generation: {str(e)}")
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/search-attendees", dependencies=[Depends(require_key)])
 async def search_attendees(

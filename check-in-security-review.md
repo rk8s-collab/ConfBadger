@@ -42,8 +42,10 @@ through the firewall for the LAN. Attacker = anyone able to reach
   committed); if unset, a random key is generated at startup and logged rather
   than defaulting to open. Volunteers open `.../checkin?key=<KEY>`; the page
   sends it as an `X-Checkin-Key` header on every request. Constant-time compare.
-- **Removed** `/upload-csv`, `/upload-results-hash`, and `/list-directories`.
-  The CSV is now imported by hand, so these were pure attack surface.
+- **Removed** `/upload-results-hash` and `/list-directories` (file
+  enumeration / scan-result overwrite, not needed at check-in). `/upload-csv`
+  is kept but now requires the key and basenames the uploaded filename, so only
+  an operator can replace the attendee data.
 - **Forged check-ins rejected.** `/checkin/print` now 404s for any ticket
   number not present in `data.csv`, so no bogus labels or fake check-in rows.
 - **CSV injection neutralised.** Export cells beginning with a formula trigger
