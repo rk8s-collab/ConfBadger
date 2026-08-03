@@ -272,6 +272,16 @@
   const statusEl = document.getElementById('status');
   let timer;
 
+  // Shared key from the URL (?key=...). Volunteers open the whole link, so the
+  // key rides along and we send it as a header on every request. Held in a
+  // variable rather than written back to the page.
+  const CHECKIN_KEY = new URLSearchParams(location.search).get('key') || '';
+  function authHeaders(base) {
+    const h = Object.assign({}, base || {});
+    if (CHECKIN_KEY) h['X-Checkin-Key'] = CHECKIN_KEY;
+    return h;
+  }
+
   qEl.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(doSearch, 280);
@@ -287,7 +297,15 @@
       return;
     }
     try {
-      const res  = await fetch('/checkin/search?q=' + encodeURIComponent(q));
+      const res  = await fetch('/checkin/search?q=' + encodeURIComponent(q),
+                               { headers: authHeaders() });
+      if (res.status === 401) {
+        resultEl.hidden = true;
+        resultEl.innerHTML = '';
+        statusEl.textContent = 'Access key missing or wrong — check the link you were given.';
+        statusEl.hidden = false;
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
       if (data.length === 0) {
@@ -384,7 +402,7 @@
     try {
       const res = await fetch('/checkin/print', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ ticket_number: ticket, first_name: name }),
       });
       if (!res.ok) {

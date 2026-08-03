@@ -1,7 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import os
+import secrets
 from typing import Optional
 import shutil
 from pydantic import BaseModel
@@ -21,11 +22,38 @@ app = FastAPI()
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.DEBUG)
 
-# Enable CORS
+# ---------- shared-key auth ----------
+# The check-in server runs on the venue WiFi, where anyone can reach it. A
+# single shared key gates every data/action endpoint. Volunteers get it once,
+# in the URL (http://<host>:8000/checkin?key=...), just like the sponsor
+# scanner. The key is read from the environment so it is never committed; if
+# it is not set we mint a random one at startup and log it, rather than ever
+# defaulting to "open".
+CHECKIN_KEY = (os.environ.get("CHECKIN_KEY") or "").strip()
+if not CHECKIN_KEY:
+    CHECKIN_KEY = secrets.token_urlsafe(9)
+    logger.warning("CHECKIN_KEY not set — generated a temporary key: %s", CHECKIN_KEY)
+
+
+def require_key(
+    key: Optional[str] = Query(default=None),
+    x_checkin_key: Optional[str] = Header(default=None),
+):
+    """Accept the shared key from either the ?key= query param (so a volunteer
+    can bookmark the whole URL) or an X-Checkin-Key header (what the page sends
+    on its fetches). Constant-time compare to avoid leaking the key by timing."""
+    supplied = x_checkin_key or key or ""
+    if not secrets.compare_digest(supplied, CHECKIN_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing key")
+
+
+# CORS: no cookies are used (auth is the shared key, sent explicitly), so we
+# don't allow credentials. A cross-origin site still can't read anything
+# without the key.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,74 +71,21 @@ async def clean_temp_folder():
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
 
-@app.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
-    
-    logger.info(f"Received file upload: {file.filename}")
-    
-    # Save the uploaded file temporarily
-    temp_file_path = f"temp/{file.filename}"
-    with open(temp_file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    logger.info(f"Saved uploaded file to {temp_file_path}")
-    
-    try:
-        # Read the CSV to validate it
-        df = read_data_file(temp_file_path)
-        required_columns = ["Ticket number", "First Name", "Last Name", "Email", "Company", "Title", "Ticket title"]
-        
-        logger.info(f"CSV columns: {', '.join(df.columns)}")
-        
-        if not all(col in df.columns for col in required_columns):
-            missing = [col for col in required_columns if col not in df.columns]
-            error_msg = f"CSV missing required columns: {', '.join(missing)}"
-            logger.error(error_msg)
-            raise HTTPException(status_code=400, detail=error_msg)
-        
-        # Move the file to the main directory
-        shutil.move(temp_file_path, "data.csv")
-        logger.info("Moved temp file to data.csv")
-        
-        # Generate badges
-        logger.info("Calling createBadge with save_path='codes'")
-        try:
-            badge_count = createBadge(save_path="codes")
-            logger.info(f"createBadge returned: {badge_count} badges created")
-        except Exception as e:
-            logger.error(f"Error using createBadge with save_path='codes': {str(e)}")
-            logger.info("Trying with default parameters...")
-            try:
-                badge_count = createBadge()
-                logger.info(f"Success with default parameters: {badge_count} badges created")
-            except Exception as e2:
-                logger.error(f"Error using createBadge with default parameters: {str(e2)}")
-                # As a last resort, try running the script directly
-                logger.info("Trying with command line execution...")
-                try:
-                    os.system("python3 confbadger.py --data data.csv")
-                    logger.info("Command line execution completed")
-                    badge_count = len(os.listdir("badges"))
-                except Exception as e3:
-                    logger.error(f"Command line execution failed: {str(e3)}")
-                    raise HTTPException(status_code=500, detail=f"Failed to generate badges: {str(e)} -> {str(e2)} -> {str(e3)}")
-        
-        # Check if badges were created
-        badge_count = len(os.listdir("badges"))
-        logger.info(f"Badge generation complete. {badge_count} badges in badges/")
-        code_count = len(os.listdir("codes"))
-        logger.info(f"QR code generation complete. {code_count} QR codes in codes/")
-        
-        return {"message": f"Badges generated successfully. {badge_count} badges created."}
-    except Exception as e:
-        logger.error(f"Error during badge generation: {str(e)}")
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/search-attendees")
+@app.on_event("startup")
+async def announce_checkin_url():
+    # Print the volunteers' link once, so it's easy to copy from the terminal.
+    # Replace <mac-ip> with the Mac's LAN address (System Settings → Network).
+    logger.info("Check-in ready. Share this with volunteers (swap in the Mac's LAN IP):")
+    logger.info("    http://<mac-ip>:8000/checkin?key=%s", CHECKIN_KEY)
+
+# Note: CSV upload and badge generation are done pre-event from the CLI
+# (confbadger.py) and the file is copied into place by hand. The old
+# /upload-csv, /upload-results-hash and /list-directories endpoints were
+# removed — on the venue WiFi they let anyone overwrite the attendee data or
+# enumerate files. See the security review in check-in-security-review.md.
+
+@app.get("/search-attendees", dependencies=[Depends(require_key)])
 async def search_attendees(
     name: Optional[str] = None,
     title: Optional[str] = None,
@@ -143,48 +118,23 @@ async def search_attendees(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/badge/{filename}")
+@app.get("/badge/{filename}", dependencies=[Depends(require_key)])
 async def get_badge(filename: str):
-    badge_path = f"badges/{filename}"
+    # Guard against path traversal: only a bare filename inside badges/ is
+    # allowed. (Starlette normalises most traversal today, but validate here
+    # too so the handler is safe regardless of routing quirks.)
+    if filename != os.path.basename(filename) or filename in ("", ".", ".."):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    badge_path = os.path.join("badges", filename)
     if not os.path.exists(badge_path):
         raise HTTPException(status_code=404, detail="Badge not found")
     return FileResponse(badge_path)
 
-@app.get("/list-badges")
+@app.get("/list-badges", dependencies=[Depends(require_key)])
 async def list_badges():
     try:
         badges = os.listdir("badges")
         return {"badges": badges}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/upload-results-hash")
-async def upload_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
-    
-    # Save the uploaded file temporarily
-    temp_file_path = f"temp/{file.filename}"
-    with open(temp_file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    shutil.move(temp_file_path, "post-scan-ticket-numbers.csv")
-    df = get_data_from_ticket_numbers()
-    os.remove("post-scan-ticket-numbers.csv")
-    return {"participantdata": df.to_dict(orient="records")}
-
-@app.get("/list-directories")
-async def list_directories():
-    try:
-        badges_files = os.listdir("badges")
-        codes_files = os.listdir("codes")
-        files_in_root = os.listdir(".")
-        return {
-            "badges": badges_files,
-            "codes": codes_files,
-            "root_csv_files": [f for f in files_in_root if f.endswith('.csv')],
-            "badge_count": len(badges_files),
-            "code_count": len(codes_files)
-        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -208,7 +158,7 @@ async def features():
     return {"stickers": stickers_enabled()}
 
 
-@app.post("/generate-stickers")
+@app.post("/generate-stickers", dependencies=[Depends(require_key)])
 async def generate_stickers_endpoint(
     since: Optional[str] = None,
     after: Optional[str] = None
@@ -246,13 +196,14 @@ async def generate_stickers_endpoint(
         logger.error(f"Error generating stickers: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/download-stickers/{filename}")
+@app.get("/download-stickers/{filename}", dependencies=[Depends(require_key)])
 async def download_stickers(filename: str):
     """Download the generated stickers PDF"""
     require_stickers_enabled()
-    if not filename.endswith("-stickers.pdf"):
+    # Only a bare filename with the expected suffix — no path traversal.
+    if filename != os.path.basename(filename) or not filename.endswith("-stickers.pdf"):
         raise HTTPException(status_code=400, detail="Invalid stickers filename")
-    
+
     if not os.path.exists(filename):
         raise HTTPException(status_code=404, detail="Stickers file not found")
     
@@ -306,7 +257,18 @@ async def checkin_page():
     return FileResponse(os.path.join(_HERE, "checkin.html"))
 
 
-@app.get("/checkin/search")
+def _ticket_exists(ticket_number: str) -> bool:
+    """True if the ticket number is present in the loaded attendee data. Used to
+    reject forged/garbage check-ins so nobody can inject fake attendees into the
+    Bevy export or spew labels for tickets that don't exist."""
+    if not os.path.exists(DATA_CSV):
+        return False
+    df = read_data_file(DATA_CSV)
+    wanted = ticket_number.strip()
+    return (df["Ticket number"].astype(str).str.strip() == wanted).any()
+
+
+@app.get("/checkin/search", dependencies=[Depends(require_key)])
 async def checkin_search(q: str = ""):
     q = q.strip()
     if not q:
@@ -335,12 +297,17 @@ async def checkin_search(q: str = ""):
     ]
 
 
-@app.post("/checkin/print")
+@app.post("/checkin/print", dependencies=[Depends(require_key)])
 async def checkin_print(req: PrintRequest):
     if not req.first_name.strip():
         raise HTTPException(status_code=400, detail="first_name is required")
     if not req.ticket_number.strip():
         raise HTTPException(status_code=400, detail="ticket_number is required")
+    # Only print for a ticket that actually exists in the attendee data. This
+    # stops a forged POST from printing a bogus label or writing a fake
+    # check-in row that would corrupt the Bevy upload.
+    if not _ticket_exists(req.ticket_number):
+        raise HTTPException(status_code=404, detail="Unknown ticket number")
     try:
         # Reuse the one print path proven on our unit (PRINTER_HANDOFF.md): render
         # the true-size bitmap and hand it to CUPS at ppi=300 so the QR lands 1:1.
@@ -387,14 +354,25 @@ def _deduped_checkins():
     )
 
 
-@app.get("/checkin/list")
+@app.get("/checkin/list", dependencies=[Depends(require_key)])
 async def checkin_list():
     """JSON list of checked-in attendees (deduped), plus a count."""
     rows = _deduped_checkins()
     return {"count": len(rows), "checkins": rows}
 
 
-@app.get("/checkin/export")
+def _csv_safe(value: str) -> str:
+    """Neutralise spreadsheet formula injection. Names come from public Bevy
+    registration, so a value like =cmd|... would execute if the export is
+    opened in Excel/Sheets. Prefix any cell starting with a formula trigger
+    with an apostrophe so the spreadsheet treats it as text."""
+    s = "" if value is None else str(value)
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + s
+    return s
+
+
+@app.get("/checkin/export", dependencies=[Depends(require_key)])
 async def checkin_export():
     """Download the checked-in attendees as a CSV for upload to Bevy. One row
     per ticket number, earliest check-in time."""
@@ -403,7 +381,9 @@ async def checkin_export():
     with open(out_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=_CHECKINS_HEADER)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(
+            {k: _csv_safe(v) for k, v in row.items()} for row in rows
+        )
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return FileResponse(
         out_path,
