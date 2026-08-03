@@ -336,6 +336,30 @@ def _ticket_exists(ticket_number: str) -> bool:
     return (df["Ticket number"].astype(str).str.strip() == wanted).any()
 
 
+#: Below this length an email substring is noise rather than a search: two
+#: characters match most of the room, burying the name matches the operator
+#: actually wanted and handing a key holder a bulk listing for free.
+_EMAIL_SEARCH_MIN = 3
+
+
+def _mask_email(raw: str) -> str:
+    """First character of the local part, then a fixed run of dots, then the
+    domain: j...@worlduni.com.
+
+    Enough for an operator to tell two John Smiths apart while reading it off a
+    screen, without putting a working address list in front of everyone holding
+    the shared key — the PII dump this endpoint was hardened against. The run of
+    dots is a fixed length so it doesn't leak how long the local part is.
+    """
+    addr = (raw or "").strip()
+    if "@" not in addr:
+        return ""
+    local, _, domain = addr.partition("@")
+    if not local or not domain:
+        return ""
+    return f"{local[0]}...@{domain}"
+
+
 @app.get("/checkin/search", dependencies=[Depends(require_key)])
 async def checkin_search(q: str = ""):
     q = q.strip()
@@ -349,6 +373,10 @@ async def checkin_search(q: str = ""):
         df["First Name"].str.lower().str.contains(ql, na=False, regex=False)
         | df["Last Name"].str.lower().str.contains(ql, na=False, regex=False)
     )
+    # Two people share a name often enough that the desk has to ask for an
+    # email, so the address is searchable — but it is only ever returned masked.
+    if len(ql) >= _EMAIL_SEARCH_MIN:
+        mask |= df["Email"].astype(str).str.lower().str.contains(ql, na=False, regex=False)
     rows = df[mask].head(20)
     # Re-read on every search: roles.csv gets corrected during the morning as
     # late volunteers are added, and an edit must take effect without a restart.
@@ -360,6 +388,7 @@ async def checkin_search(q: str = ""):
             "last_name": str(row["Last Name"]).strip(),
             "company": str(row.get("Company", "") or "").strip(),
             "card_type": resolve_card_type(row, roles),
+            "email_masked": _mask_email(str(row.get("Email", "") or "")),
         }
         for _, row in rows.iterrows()
     ]

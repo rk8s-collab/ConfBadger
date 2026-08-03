@@ -223,6 +223,14 @@ Useful flags: `--dry-run` builds the instructions without a printer,
 The raster is generated at exactly 696x271 pixels because `brother_ql` rejects a
 die-cut image of any other size rather than rescaling it.
 
+## Finding someone at the check-in desk
+
+Search matches first name, last name and email, so two people with the same name
+can be separated by asking for an address. Addresses come back **masked**
+(`j...@worlduni.com`) — enough to pick the right row, never a usable list. Email
+matching needs at least three characters. Run `python3 test_checkin_search.py`;
+the reasoning is in `check-in-security-review.md`.
+
 ## Card types at the check-in desk
 
 Five pre-printed cards are stocked — VOLUNTEER, ORGANISER, SPONSOR, SPEAKER and
