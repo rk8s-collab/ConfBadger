@@ -2,14 +2,12 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import os
-import subprocess
-import tempfile
 from typing import Optional
 import shutil
 from pydantic import BaseModel
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
 from generate_stickers import generate_stickers
-from label_render import DPI, render_label
+from print_label import print_via_cups, QUEUE, LABEL
 import logging
 import glob
 import yaml
@@ -263,8 +261,11 @@ async def download_stickers(filename: str):
 
 # ---------- check-in endpoints (Phase 4 Stage 2) ----------
 
-_CUPS_QUEUE = "Brother_QL_810W"
-_CUPS_PAGE_SIZE = "29x62mm"   # DK-11209 die-cut
+#: Label stock loaded on the QL-810W. "62x29" = DK-11209 die-cut (production);
+#: "62" = DK-22205 continuous (stand-in). print_via_cups maps this to the right
+#: CUPS PageSize, so the endpoint and the print_label.py CLI stay in lockstep.
+_CHECKIN_LABEL = LABEL          # "62x29" — DK-11209 die-cut
+_CUPS_QUEUE = QUEUE             # "Brother_QL_810W"
 
 DATA_CSV = "data.csv"
 
@@ -321,28 +322,18 @@ async def checkin_print(req: PrintRequest):
     if not req.ticket_number.strip():
         raise HTTPException(status_code=400, detail="ticket_number is required")
     try:
-        image = render_label(req.first_name.strip(), req.ticket_number.strip())
-        handle, path = tempfile.mkstemp(prefix="confbadger-", suffix=".png")
-        os.close(handle)
-        try:
-            image.save(path, dpi=(DPI, DPI))
-            argv = [
-                "lp", "-d", _CUPS_QUEUE,
-                "-o", f"PageSize={_CUPS_PAGE_SIZE}",
-                "-o", f"ppi={DPI}",
-                "-o", "ColorModel=Gray",
-                "-o", "CutMedia=EndOfPage",
-                path,
-            ]
-            result = subprocess.run(argv, capture_output=True, text=True, timeout=15)
-            if result.returncode != 0:
-                raise RuntimeError((result.stderr or result.stdout).strip())
-        finally:
-            os.unlink(path)
+        # Reuse the one print path proven on our unit (PRINTER_HANDOFF.md): render
+        # the true-size bitmap and hand it to CUPS at ppi=300 so the QR lands 1:1.
+        job = print_via_cups(
+            req.first_name.strip(),
+            req.ticket_number.strip(),
+            label=_CHECKIN_LABEL,
+            queue=_CUPS_QUEUE,
+        )
     except Exception as exc:
         logger.error("print failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
-    return {"ok": True, "job": result.stdout.strip()}
+    return {"ok": True, "job": job}
 
 
 if __name__ == "__main__":
