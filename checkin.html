@@ -145,6 +145,61 @@
     .print-btn:disabled { opacity: 0.65; cursor: default; }
     .print-btn.ok  { background: #34c759; }
     .print-btn.err { background: #ff3b30; }
+
+    /* Name-on-label prompt */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+    .modal[hidden] { display: none; }
+
+    .modal-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 22px 20px 18px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 12px 44px rgba(0, 0, 0, 0.25);
+    }
+    .modal-card h2 { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
+    .modal-sub { font-size: 13px; color: var(--sub); margin-bottom: 14px; }
+
+    #printName {
+      display: block;
+      width: 100%;
+      padding: 13px 16px;
+      font-size: 20px;
+      font-weight: 600;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      -webkit-appearance: none;
+    }
+    #printName:focus { border-color: var(--accent); }
+
+    .modal-hint { min-height: 18px; font-size: 13px; color: #ff3b30; margin: 6px 2px 0; }
+
+    .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .modal-actions button {
+      flex: 1;
+      padding: 13px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -158,6 +213,20 @@
 
 <p id="status">Start typing to search.</p>
 <ul id="results" hidden></ul>
+
+<div id="nameModal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">Name on label</h2>
+    <p class="modal-sub">Shorten it if it&rsquo;s long. The QR code is unchanged.</p>
+    <input id="printName" type="text" autocomplete="off" autocorrect="off"
+           autocapitalize="words" spellcheck="false" enterkeyhint="done">
+    <p id="modalHint" class="modal-hint"></p>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn-secondary" type="button">Cancel</button>
+      <button id="modalPrint"  class="btn-primary"   type="button">Print</button>
+    </div>
+  </div>
+</div>
 
 <script>
   const qEl      = document.getElementById('q');
@@ -224,12 +293,52 @@
     </li>`;
   }
 
-  resultEl.addEventListener('click', async e => {
+  // ---------- Print → confirm/shorten the name → print ----------
+  const modal    = document.getElementById('nameModal');
+  const nameIn   = document.getElementById('printName');
+  const modalMsg = document.getElementById('modalHint');
+  let pendingBtn = null, pendingTicket = null;
+
+  resultEl.addEventListener('click', e => {
     const btn = e.target.closest('.print-btn');
     if (!btn || btn.classList.contains('ok')) return;
-    const li     = btn.closest('li');
-    const ticket = li.dataset.ticket;
-    const name   = li.dataset.name;
+    const li = btn.closest('li');
+    pendingBtn    = btn;
+    pendingTicket = li.dataset.ticket;   // the QR content — never edited here
+    openModal(li.dataset.name);
+  });
+
+  function openModal(name) {
+    modalMsg.textContent = '';
+    nameIn.value = name || '';
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => { nameIn.focus(); nameIn.select(); });
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+    document.body.style.overflow = '';
+    pendingBtn = pendingTicket = null;
+  }
+
+  document.getElementById('modalCancel').addEventListener('click', closeModal);
+  document.getElementById('modalPrint').addEventListener('click', confirmPrint);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  nameIn.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); confirmPrint(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeModal(); }
+  });
+
+  function confirmPrint() {
+    const name = nameIn.value.trim();
+    if (!name) { modalMsg.textContent = 'Name can’t be empty.'; nameIn.focus(); return; }
+    const btn = pendingBtn, ticket = pendingTicket;
+    closeModal();
+    doPrint(btn, ticket, name);
+  }
+
+  async function doPrint(btn, ticket, name) {
     btn.disabled = true;
     btn.textContent = 'Printing…';
     btn.classList.remove('err');
@@ -251,7 +360,7 @@
       btn.disabled = false;
       console.error('print error:', err.message);
     }
-  });
+  }
 
   function esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
