@@ -1,0 +1,8 @@
+card_type,match_type,value
+ORGANISER,email,sam.organiser@example.com
+ORGANISER,email,alex.chair@example.com
+VOLUNTEER,email,jo.volunteer@example.com
+VOLUNTEER,email,pat.helper@example.com
+SPONSOR,discount_code,KCDMEL26_ACME_FREE
+SPONSOR,discount_code,KCDMEL26_GLOBEX_FREE
+SPEAKER,discount_code,KCDMEL26SPKR

@@ -23,6 +23,14 @@
       --accent: #0086FF;
       --accent-press: #006CE0;
       --radius: 12px;
+
+      /* One colour per pre-printed card. Set these to the actual card stock so
+         the operator can match the screen to the box without reading a word. */
+      --card-volunteer: #ff9500;
+      --card-organiser: #bf5af2;
+      --card-sponsor:   #00a37a;
+      --card-speaker:   #e0245e;
+      --card-attendee:  #5b7085;
     }
 
     body {
@@ -107,24 +115,24 @@
       flex-wrap: wrap;
     }
 
-    /* Attendee type badge */
-    .type {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-      padding: 3px 10px;
-      border-radius: 20px;
+    /* Card type — which pre-printed card to pull from the box. This is the one
+       thing the operator must not get wrong, so it is sized to be read at a
+       glance across a busy desk rather than tucked away as a small chip. */
+    .card-type {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      padding: 5px 12px;
+      border-radius: 6px;
       white-space: nowrap;
-      background: #8e8e93;
+      background: var(--card-attendee);
       color: #fff;
     }
-    .type--earlybird  { background: #34c759; }
-    .type--standard   { background: var(--accent); }
-    .type--volunteer  { background: #ff9500; }
-    .type--organizer,
-    .type--organiser  { background: #bf5af2; }
-    .type--student    { background: #5856d6; }
-    .type--late       { background: #ff3b30; }
+    .card-type--volunteer { background: var(--card-volunteer); }
+    .card-type--organiser { background: var(--card-organiser); }
+    .card-type--sponsor   { background: var(--card-sponsor); }
+    .card-type--speaker   { background: var(--card-speaker); }
+    .card-type--attendee  { background: var(--card-attendee); }
 
     .company {
       font-size: 14px;
@@ -176,6 +184,25 @@
       max-width: 380px;
       box-shadow: 0 12px 44px rgba(0, 0, 0, 0.25);
     }
+    /* The card type is repeated here so the operator confirms the card at the
+       same moment they confirm the name — the last chance to catch a mis-pick. */
+    .modal-card-type {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-align: center;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      color: #fff;
+      background: var(--card-attendee);
+    }
+    .modal-card-type[data-card="VOLUNTEER"] { background: var(--card-volunteer); }
+    .modal-card-type[data-card="ORGANISER"] { background: var(--card-organiser); }
+    .modal-card-type[data-card="SPONSOR"]   { background: var(--card-sponsor); }
+    .modal-card-type[data-card="SPEAKER"]   { background: var(--card-speaker); }
+    .modal-card-type[data-card="ATTENDEE"]  { background: var(--card-attendee); }
+
     .modal-card h2 { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
     .modal-sub { font-size: 13px; color: var(--sub); margin-bottom: 14px; }
 
@@ -226,6 +253,7 @@
 
 <div id="nameModal" class="modal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <p id="modalCard" class="modal-card-type">ATTENDEE</p>
     <h2 id="modalTitle">Name on label</h2>
     <p class="modal-sub">Shorten it if it&rsquo;s long. The QR code is unchanged.</p>
     <input id="printName" type="text" autocomplete="off" autocorrect="off"
@@ -278,24 +306,21 @@
     }
   }
 
-  function typeClass(t) {
-    const s = (t || '').toLowerCase();
-    if (s.includes('volunteer'))              return 'volunteer';
-    if (s.includes('early'))                  return 'earlybird';
-    if (s.includes('standard'))               return 'standard';
-    if (s.includes('organis') || s.includes('organiz')) return 'organizer';
-    if (s.includes('student'))                return 'student';
-    if (s.includes('late'))                   return 'late';
-    return '';
+  const CARD_TYPES = ['VOLUNTEER', 'ORGANISER', 'SPONSOR', 'SPEAKER', 'ATTENDEE'];
+
+  function cardType(t) {
+    const s = String(t || '').toUpperCase();
+    return CARD_TYPES.includes(s) ? s : 'ATTENDEE';
   }
 
   function renderRow(a) {
-    const cls = typeClass(a.attendee_type);
-    return `<li data-ticket="${esc(a.ticket_number)}" data-name="${esc(a.first_name)}">
+    const card = cardType(a.card_type);
+    return `<li data-ticket="${esc(a.ticket_number)}" data-name="${esc(a.first_name)}"
+                data-card="${card}">
       <div class="info">
         <div class="name">${esc(a.first_name)} ${esc(a.last_name)}</div>
         <div class="meta">
-          <span class="type${cls ? ' type--' + cls : ''}">${esc(a.attendee_type || '–')}</span>
+          <span class="card-type card-type--${card.toLowerCase()}">${card}</span>
           ${a.company ? `<span class="company">${esc(a.company)}</span>` : ''}
         </div>
       </div>
@@ -307,6 +332,7 @@
   const modal    = document.getElementById('nameModal');
   const nameIn   = document.getElementById('printName');
   const modalMsg = document.getElementById('modalHint');
+  const cardEl   = document.getElementById('modalCard');
   let pendingBtn = null, pendingTicket = null;
 
   resultEl.addEventListener('click', e => {
@@ -315,11 +341,14 @@
     const li = btn.closest('li');
     pendingBtn    = btn;
     pendingTicket = li.dataset.ticket;   // the QR content — never edited here
-    openModal(li.dataset.name);
+    openModal(li.dataset.name, li.dataset.card);
   });
 
-  function openModal(name) {
+  function openModal(name, card) {
     modalMsg.textContent = '';
+    const c = cardType(card);
+    cardEl.textContent = c + ' CARD';
+    cardEl.dataset.card = c;
     nameIn.value = name || '';
     modal.hidden = false;
     document.body.style.overflow = 'hidden';
