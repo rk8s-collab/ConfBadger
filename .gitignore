@@ -45,8 +45,9 @@ Thumbs.db
 *.pdf
 *.csv
 *.png
-!data.csv
-!data-pre-order.csv
+# Only the anonymised samples are tracked. Uploads land on data.csv (app.py),
+# so a real attendee export must never be re-includable here.
+!*.sample.csv
 codes/*.png
 badges/*.pdf
 

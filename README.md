@@ -170,6 +170,59 @@ It is possible to generate the badges using `python3 confbadger.py`. Command lin
 --config CONFIG       Config file. Default is config.yaml.
 ```
 
+## Check-in labels on a Brother QL-810W
+
+`label_render.py` renders a single peel-and-stick label for **DK-11209 die-cut
+stock (62 x 29mm)**: attendee first name plus a QR of the bare ticket number.
+Note DK-11202 is a different product — 62 x 100mm shipping labels — and the
+printer rejects it with "Replace media error" against this layout. DK-22205
+(62mm continuous) also works, via `--label 62`.
+Nothing else goes on it — last name, company and the attendee-type banner are
+already on the pre-printed card. This is separate from the A4 sticker sheet
+produced by `generate_stickers.py`.
+
+Preview one without a printer (PNG carries 300dpi, so print at 100% scale to
+check it physically):
+
+```bash
+python3 label_render.py --name Rob --ticket CNCFA23236346 --out preview.png
+python3 test_label_render.py
+```
+
+### Printing
+
+Install the printing dependency:
+
+```bash
+pip install brother_ql
+```
+
+Find the printer. **USB is discoverable, network is not** — `discover` raises
+`NotImplementedError` on the network backend, so the IP has to come from
+elsewhere:
+
+```bash
+brother_ql --backend pyusb discover   # macOS also needs: brew install libusb
+lpstat -v                             # if already added to macOS, shows the device URI
+```
+
+Otherwise take the address from the router's DHCP table, and give the printer a
+reservation so it survives a reboot at the venue.
+
+Then print:
+
+```bash
+python3 print_label.py --name Rob --ticket CNCFA23236346 \
+    --printer tcp://192.168.1.50:9100
+```
+
+Useful flags: `--dry-run` builds the instructions without a printer,
+`--rotate 180` if the label comes out inverted relative to the card, and
+`--threshold` (default 70) if the print looks washed out or too heavy.
+
+The raster is generated at exactly 696x271 pixels because `brother_ql` rejects a
+die-cut image of any other size rather than rescaling it.
+
 ## Project Structure
 
 ```
@@ -177,7 +230,9 @@ ConfBadger/
 ├── app.py                 # FastAPI backend
 ├── confbadger.py          # Badge generation logic
 ├── requirements.txt       # Python dependencies
-├── data.csv               # Sample CSV file
+├── data.sample.csv        # Anonymised sample; copy to data.csv to try it
+├── label_render.py        # Single DK-11202 check-in label for the QL-810W
+├── print_label.py         # Sends one rendered label to the QL-810W
 ├── KCDAMS2023_Badge_Template.png  # Badge template
 ├── frontend/              # React frontend
 │   ├── package.json
