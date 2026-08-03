@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
 from generate_stickers import generate_stickers
 from print_label import print_via_cups, QUEUE, LABEL
+import csv
+from datetime import datetime, timezone
 import logging
 import glob
 import yaml
@@ -269,6 +271,29 @@ _CUPS_QUEUE = QUEUE             # "Brother_QL_810W"
 
 DATA_CSV = "data.csv"
 
+#: Append-only check-in log. One row is written the moment a label is
+#: successfully sent to the printer (the operator has tapped Print), so this is
+#: the record of who showed up. Re-prints append another row; the export
+#: endpoint dedupes by ticket number, keeping the first (earliest) check-in.
+CHECKINS_CSV = "checkins.csv"
+_CHECKINS_HEADER = ["ticket_number", "first_name", "checked_in_at"]
+
+
+def _record_checkin(ticket_number: str, first_name: str) -> None:
+    """Append a check-in row with an ISO-8601 UTC timestamp. Best-effort: a
+    logging failure must never stop a badge from printing, so callers wrap this
+    so the attendee still gets their label if the disk write hiccups."""
+    new_file = not os.path.exists(CHECKINS_CSV)
+    with open(CHECKINS_CSV, "a", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        if new_file:
+            writer.writerow(_CHECKINS_HEADER)
+        writer.writerow([
+            ticket_number,
+            first_name,
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        ])
+
 
 def _normalise_type(raw: str) -> str:
     """Map Discount field values to a human label. KCD volunteers use an access
@@ -333,7 +358,63 @@ async def checkin_print(req: PrintRequest):
     except Exception as exc:
         logger.error("print failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    # The label is out; record the check-in. Never let a log write failure
+    # surface as a print error — the attendee already has their badge.
+    try:
+        _record_checkin(req.ticket_number.strip(), req.first_name.strip())
+    except Exception as exc:
+        logger.error("check-in log write failed for %s: %s", req.ticket_number, exc)
     return {"ok": True, "job": job}
+
+
+def _deduped_checkins():
+    """Read the append-only log and collapse re-prints to one row per ticket,
+    keeping the earliest check-in time. Rows are returned newest-first."""
+    if not os.path.exists(CHECKINS_CSV):
+        return []
+    first_seen = {}
+    with open(CHECKINS_CSV, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            ticket = (row.get("ticket_number") or "").strip()
+            if not ticket:
+                continue
+            ts = (row.get("checked_in_at") or "").strip()
+            existing = first_seen.get(ticket)
+            # Keep the earliest timestamp for each ticket.
+            if existing is None or (ts and ts < existing["checked_in_at"]):
+                first_seen[ticket] = {
+                    "ticket_number": ticket,
+                    "first_name": (row.get("first_name") or "").strip(),
+                    "checked_in_at": ts,
+                }
+    return sorted(
+        first_seen.values(), key=lambda r: r["checked_in_at"], reverse=True
+    )
+
+
+@app.get("/checkin/list")
+async def checkin_list():
+    """JSON list of checked-in attendees (deduped), plus a count."""
+    rows = _deduped_checkins()
+    return {"count": len(rows), "checkins": rows}
+
+
+@app.get("/checkin/export")
+async def checkin_export():
+    """Download the checked-in attendees as a CSV for upload to Bevy. One row
+    per ticket number, earliest check-in time."""
+    rows = _deduped_checkins()
+    out_path = "checkins-export.csv"
+    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_CHECKINS_HEADER)
+        writer.writeheader()
+        writer.writerows(rows)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return FileResponse(
+        out_path,
+        media_type="text/csv",
+        filename=f"kcd-checkins-{stamp}.csv",
+    )
 
 
 if __name__ == "__main__":
