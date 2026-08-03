@@ -48,9 +48,11 @@ function App() {
     after: '',
   });
   const [generatingStickers, setGeneratingStickers] = useState(false);
+  const [stickersEnabled, setStickersEnabled] = useState(false);
 
   useEffect(() => {
     fetchBadges();
+    fetchFeatures();
   }, []);
 
   useEffect(() => {
@@ -69,6 +71,17 @@ function App() {
       setBadges(response.data.badges);
     } catch (err) {
       setError('Failed to fetch badges');
+    }
+  };
+
+  // Left disabled if the flag can't be read, so a misconfigured deployment hides
+  // the sheet generator rather than offering it. The backend enforces this too.
+  const fetchFeatures = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/features`);
+      setStickersEnabled(Boolean(response.data.stickers));
+    } catch (err) {
+      setStickersEnabled(false);
     }
   };
 
@@ -321,6 +334,7 @@ function App() {
         </Grid>
       </Paper>
 
+      {stickersEnabled && (
       <Paper sx={{ p: 3, mb: 4 }}>
         <Typography variant="h6" gutterBottom>
           Generate Sticker Labels
@@ -363,6 +377,7 @@ function App() {
           </Grid>
         </Grid>
       </Paper>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
