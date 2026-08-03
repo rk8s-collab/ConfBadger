@@ -54,6 +54,26 @@ through the firewall for the LAN. Attacker = anyone able to reach
   (basename-only) as defence in depth.
 - **CORS** no longer allows credentials (none are used).
 
+## Searching by email (added after the review)
+
+Two attendees sharing a name is common enough that the desk has to ask for an
+email, so `/checkin/search` matches on the `Email` column as well. That widens
+what the endpoint touches, so it is deliberately one-way:
+
+- The address is **matched** in full but **returned masked** — `j...@domain`,
+  first character and domain only. A key holder can tell two John Smiths apart
+  but cannot harvest a working address list, which is the PII dump this endpoint
+  was hardened against. The dots are a fixed length so the local part's length
+  doesn't leak either.
+- Email matching needs **three characters or more**. Below that a substring
+  matches most of the room, which both buries the name matches the operator
+  wanted and hands over a bulk listing for one keystroke.
+- Name matching is unchanged, and the 20-row cap still applies to both.
+
+Residual risk: a key holder who already knows an address can confirm that person
+is registered, and can confirm the domain of anyone they can name. Both were
+already true of the name search, and the key remains the real boundary.
+
 ## Operating notes
 
 - Set the key when starting: `CHECKIN_KEY=<something-long> python3 app.py`.

@@ -142,6 +142,18 @@
       text-overflow: ellipsis;
     }
 
+    /* Masked address, shown so two people with the same name can be told apart
+       when the operator asks for an email. Never the full address. */
+    .email {
+      font-size: 13px;
+      color: var(--sub);
+      font-variant-numeric: tabular-nums;
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     /* Print button */
     .print-btn {
       flex-shrink: 0;
@@ -243,7 +255,7 @@
 
 <header>
   <h1>KCD Melbourne &mdash; Check-in</h1>
-  <input id="q" type="search" placeholder="Search name&hellip;"
+  <input id="q" type="search" placeholder="Search name or email&hellip;"
          autocomplete="off" autocorrect="off" autocapitalize="off"
          spellcheck="false" autofocus>
 </header>
@@ -341,6 +353,7 @@
           <span class="card-type card-type--${card.toLowerCase()}">${card}</span>
           ${a.company ? `<span class="company">${esc(a.company)}</span>` : ''}
         </div>
+        ${a.email_masked ? `<div class="email">${esc(a.email_masked)}</div>` : ''}
       </div>
       <button class="print-btn">Print</button>
     </li>`;
