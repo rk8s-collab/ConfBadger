@@ -2,14 +2,14 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import os
-import subprocess
-import tempfile
 from typing import Optional
 import shutil
 from pydantic import BaseModel
 from confbadger import createBadge, read_data_file, get_data_from_ticket_numbers
 from generate_stickers import generate_stickers
-from label_render import DPI, render_label
+from print_label import print_via_cups, QUEUE, LABEL
+import csv
+from datetime import datetime, timezone
 import logging
 import glob
 import yaml
@@ -263,10 +263,36 @@ async def download_stickers(filename: str):
 
 # ---------- check-in endpoints (Phase 4 Stage 2) ----------
 
-_CUPS_QUEUE = "Brother_QL_810W"
-_CUPS_PAGE_SIZE = "29x62mm"   # DK-11209 die-cut
+#: Label stock loaded on the QL-810W. "62x29" = DK-11209 die-cut (production);
+#: "62" = DK-22205 continuous (stand-in). print_via_cups maps this to the right
+#: CUPS PageSize, so the endpoint and the print_label.py CLI stay in lockstep.
+_CHECKIN_LABEL = LABEL          # "62x29" — DK-11209 die-cut
+_CUPS_QUEUE = QUEUE             # "Brother_QL_810W"
 
 DATA_CSV = "data.csv"
+
+#: Append-only check-in log. One row is written the moment a label is
+#: successfully sent to the printer (the operator has tapped Print), so this is
+#: the record of who showed up. Re-prints append another row; the export
+#: endpoint dedupes by ticket number, keeping the first (earliest) check-in.
+CHECKINS_CSV = "checkins.csv"
+_CHECKINS_HEADER = ["ticket_number", "first_name", "checked_in_at"]
+
+
+def _record_checkin(ticket_number: str, first_name: str) -> None:
+    """Append a check-in row with an ISO-8601 UTC timestamp. Best-effort: a
+    logging failure must never stop a badge from printing, so callers wrap this
+    so the attendee still gets their label if the disk write hiccups."""
+    new_file = not os.path.exists(CHECKINS_CSV)
+    with open(CHECKINS_CSV, "a", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        if new_file:
+            writer.writerow(_CHECKINS_HEADER)
+        writer.writerow([
+            ticket_number,
+            first_name,
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        ])
 
 
 def _normalise_type(raw: str) -> str:
@@ -321,28 +347,74 @@ async def checkin_print(req: PrintRequest):
     if not req.ticket_number.strip():
         raise HTTPException(status_code=400, detail="ticket_number is required")
     try:
-        image = render_label(req.first_name.strip(), req.ticket_number.strip())
-        handle, path = tempfile.mkstemp(prefix="confbadger-", suffix=".png")
-        os.close(handle)
-        try:
-            image.save(path, dpi=(DPI, DPI))
-            argv = [
-                "lp", "-d", _CUPS_QUEUE,
-                "-o", f"PageSize={_CUPS_PAGE_SIZE}",
-                "-o", f"ppi={DPI}",
-                "-o", "ColorModel=Gray",
-                "-o", "CutMedia=EndOfPage",
-                path,
-            ]
-            result = subprocess.run(argv, capture_output=True, text=True, timeout=15)
-            if result.returncode != 0:
-                raise RuntimeError((result.stderr or result.stdout).strip())
-        finally:
-            os.unlink(path)
+        # Reuse the one print path proven on our unit (PRINTER_HANDOFF.md): render
+        # the true-size bitmap and hand it to CUPS at ppi=300 so the QR lands 1:1.
+        job = print_via_cups(
+            req.first_name.strip(),
+            req.ticket_number.strip(),
+            label=_CHECKIN_LABEL,
+            queue=_CUPS_QUEUE,
+        )
     except Exception as exc:
         logger.error("print failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
-    return {"ok": True, "job": result.stdout.strip()}
+    # The label is out; record the check-in. Never let a log write failure
+    # surface as a print error — the attendee already has their badge.
+    try:
+        _record_checkin(req.ticket_number.strip(), req.first_name.strip())
+    except Exception as exc:
+        logger.error("check-in log write failed for %s: %s", req.ticket_number, exc)
+    return {"ok": True, "job": job}
+
+
+def _deduped_checkins():
+    """Read the append-only log and collapse re-prints to one row per ticket,
+    keeping the earliest check-in time. Rows are returned newest-first."""
+    if not os.path.exists(CHECKINS_CSV):
+        return []
+    first_seen = {}
+    with open(CHECKINS_CSV, newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            ticket = (row.get("ticket_number") or "").strip()
+            if not ticket:
+                continue
+            ts = (row.get("checked_in_at") or "").strip()
+            existing = first_seen.get(ticket)
+            # Keep the earliest timestamp for each ticket.
+            if existing is None or (ts and ts < existing["checked_in_at"]):
+                first_seen[ticket] = {
+                    "ticket_number": ticket,
+                    "first_name": (row.get("first_name") or "").strip(),
+                    "checked_in_at": ts,
+                }
+    return sorted(
+        first_seen.values(), key=lambda r: r["checked_in_at"], reverse=True
+    )
+
+
+@app.get("/checkin/list")
+async def checkin_list():
+    """JSON list of checked-in attendees (deduped), plus a count."""
+    rows = _deduped_checkins()
+    return {"count": len(rows), "checkins": rows}
+
+
+@app.get("/checkin/export")
+async def checkin_export():
+    """Download the checked-in attendees as a CSV for upload to Bevy. One row
+    per ticket number, earliest check-in time."""
+    rows = _deduped_checkins()
+    out_path = "checkins-export.csv"
+    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_CHECKINS_HEADER)
+        writer.writeheader()
+        writer.writerows(rows)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return FileResponse(
+        out_path,
+        media_type="text/csv",
+        filename=f"kcd-checkins-{stamp}.csv",
+    )
 
 
 if __name__ == "__main__":
